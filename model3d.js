@@ -99,7 +99,7 @@ function taperedTube(curve, lengthSegments, radialSegments, startRadius, endRadi
 let feminineTorsoRows = [];
 if (feminine) {
   const bodyRows = [
-    { y: 1.08, cx: 0, rx: .30, rz: .20 }, { y: 1.23, cx: 0, rx: .31, rz: .20 }, { y: 1.29, cx: 0, rx: .38, rz: .22 },
+    { y: 1.23, cx: 0, rx: .31, rz: .20 }, { y: 1.29, cx: 0, rx: .38, rz: .22 },
     { y: 1.35, cx: 0, rx: .45, rz: .24 }, { y: 1.41, cx: 0, rx: .485, rz: .25 },
     { y: 1.47, cx: 0, rx: .45, rz: .25 }, { y: 1.54, cx: 0, rx: .38, rz: .24 },
     { y: 1.62, cx: 0, rx: .33, rz: .24 }, { y: 1.70, cx: 0, rx: .30, rz: .225 },
@@ -340,8 +340,10 @@ function createUnifiedBodysuit() {
       // lands at the requested mid-thigh height instead of extending to the knee.
       d = smoothUnion(d, capsuleDistance(x, y, z, sign * .27, 1.46, 0, sign * .27, 1.08, 0, .245, .24), .14);
     }
-    // A restrained center crease keeps the touching thigh volumes individually readable.
-    const thighCrease = capsuleDistance(x, y, z, 0, 1.34, 0, 0, 1.08, 0, .018, .018);
+    // A thin open slit separates the thighs below the crotch, so no cloth bridges the two legs
+    // and each thigh can swing on its own without stretching a web between them. The slit is cut in
+    // the x/y plane only (z is ignored), so it goes all the way from the front to the back of the body.
+    const thighCrease = capsuleDistance(x, y, 0, 0, 1.27, 0, 0, .70, 0, .03, .03);
     d = smoothMax(d, -thighCrease, .012);
     // Soft V-shaped crease where the belly meets each thigh.
     for (const sign of [-1, 1]) d = smoothMax(d, -capsuleDistance(x, y, z, sign * .42, 1.62, .30, sign * .03, 1.30, .29, .05, .05), .035);
@@ -416,10 +418,14 @@ function createUnifiedBodysuit() {
       else influences = [[2, 1]];
     } else {
       // Everything below the crotch belongs to exactly one leg, so the whole thigh follows it.
-      // Above that the cloth fades into the torso; only the centre seam is held back by the pelvis.
-      const legBlend = 1 - smoothstep(1.40, 1.74, y);
-      const crotchHold = smoothstep(1.30, 1.46, y) * (1 - smoothstep(.02, .12, Math.abs(x)));
-      const hipBlend = legBlend * (1 - crotchHold), leftShare = THREE.MathUtils.clamp(.5 - x / .04, 0, 1), rightShare = 1 - leftShare;
+      // The fade into the pelvis depends on height only; a sideways cut-off would stretch a web of
+      // cloth between the legs whenever they swing differently.
+      const legBlend = 1 - smoothstep(1.38, 1.80, y);
+      // Left/right split: a hard split per leg low down, easing to an even share toward the crotch.
+      // The crotch is the one place the legs stay joined, so a gradual change spreads the stretch into a
+      // soft fold instead of a thin fan when one leg swings further than the other.
+      const crotchEase = smoothstep(1.08, 1.34, y) * (1 - smoothstep(0, .16, Math.abs(x)));
+      const hipBlend = legBlend, leftShare = THREE.MathUtils.lerp(THREE.MathUtils.clamp(.5 - x / .04, 0, 1), .5, crotchEase), rightShare = 1 - leftShare;
       const torsoShare = 1 - hipBlend;
       const localY = THREE.MathUtils.clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48, midShare = localY / .48;
       influences = [[0, torsoShare * rootShare], [1, torsoShare * midShare], [3, hipBlend * leftShare], [6, hipBlend * rightShare]];
