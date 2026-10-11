@@ -99,9 +99,9 @@ function taperedTube(curve, lengthSegments, radialSegments, startRadius, endRadi
 let feminineTorsoRows = [];
 if (feminine) {
   const bodyRows = [
-    { y: 1.23, cx: 0, rx: .29, rz: .24 }, { y: 1.29, cx: 0, rx: .35, rz: .28 },
-    { y: 1.35, cx: 0, rx: .43, rz: .33 }, { y: 1.41, cx: 0, rx: .48, rz: .35 },
-    { y: 1.47, cx: 0, rx: .45, rz: .33 }, { y: 1.54, cx: 0, rx: .38, rz: .28 },
+    { y: 1.08, cx: 0, rx: .30, rz: .20 }, { y: 1.23, cx: 0, rx: .31, rz: .20 }, { y: 1.29, cx: 0, rx: .38, rz: .22 },
+    { y: 1.35, cx: 0, rx: .45, rz: .24 }, { y: 1.41, cx: 0, rx: .485, rz: .25 },
+    { y: 1.47, cx: 0, rx: .45, rz: .25 }, { y: 1.54, cx: 0, rx: .38, rz: .24 },
     { y: 1.62, cx: 0, rx: .33, rz: .24 }, { y: 1.70, cx: 0, rx: .30, rz: .225 },
     { y: 1.88, cx: 0, rx: .32, rz: .23 }, { y: 2.02, cx: 0, rx: .35, rz: .24 },
     { y: 2.12, cx: 0, rx: .39, rz: .255 },
@@ -338,11 +338,13 @@ function createUnifiedBodysuit() {
       d = smoothUnion(d, ellipsoidDistance(x, y, z, sign * .20, 1.36, -.17, .30, .27, .23), .04);
       // The lower capsule endpoint is raised by one radius so its rounded hem
       // lands at the requested mid-thigh height instead of extending to the knee.
-      d = smoothUnion(d, capsuleDistance(x, y, z, sign * .27, 1.59, 0, sign * .27, 1.08, 0, .245, .24), .018);
+      d = smoothUnion(d, capsuleDistance(x, y, z, sign * .27, 1.46, 0, sign * .27, 1.08, 0, .245, .24), .14);
     }
     // A restrained center crease keeps the touching thigh volumes individually readable.
     const thighCrease = capsuleDistance(x, y, z, 0, 1.34, 0, 0, 1.08, 0, .018, .018);
     d = smoothMax(d, -thighCrease, .012);
+    // Soft V-shaped crease where the belly meets each thigh.
+    for (const sign of [-1, 1]) d = smoothMax(d, -capsuleDistance(x, y, z, sign * .42, 1.62, .30, sign * .03, 1.30, .29, .05, .05), .035);
     // Remove a shallow neck opening; the widened shoulder slope forms the trapezius.
     const neckOpening = capsuleDistance(x, y, z, 0, 2.47, 0, 0, 2.84, 0, .145, .145);
     return smoothMax(d - .012, -neckOpening, .025);
