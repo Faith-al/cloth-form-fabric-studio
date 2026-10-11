@@ -413,8 +413,11 @@ function createUnifiedBodysuit() {
       else if (localY < 1.03) influences = [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]];
       else influences = [[2, 1]];
     } else {
-      const thighArea = smoothstep(.09, .24, Math.abs(x));
-      const hipBlend = (1 - smoothstep(1.34, 1.68, y)) * thighArea, leftShare = THREE.MathUtils.clamp(.5 - x / .16, 0, 1), rightShare = 1 - leftShare;
+      // Everything below the crotch belongs to exactly one leg, so the whole thigh follows it.
+      // Above that the cloth fades into the torso; only the centre seam is held back by the pelvis.
+      const legBlend = 1 - smoothstep(1.40, 1.74, y);
+      const crotchHold = smoothstep(1.30, 1.46, y) * (1 - smoothstep(.02, .12, Math.abs(x)));
+      const hipBlend = legBlend * (1 - crotchHold), leftShare = THREE.MathUtils.clamp(.5 - x / .04, 0, 1), rightShare = 1 - leftShare;
       const torsoShare = 1 - hipBlend;
       const localY = THREE.MathUtils.clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48, midShare = localY / .48;
       influences = [[0, torsoShare * rootShare], [1, torsoShare * midShare], [3, hipBlend * leftShare], [6, hipBlend * rightShare]];
