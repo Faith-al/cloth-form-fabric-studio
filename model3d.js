@@ -4,6 +4,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 
 const mount = document.getElementById('model');
 const stage = document.getElementById('stage');
+const feminine = document.body.dataset.model === 'woman';
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#f2f0e9');
 const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
@@ -38,7 +39,9 @@ const floor = new THREE.Mesh(new THREE.CircleGeometry(3, 64), new THREE.MeshStan
 floor.rotation.x = -Math.PI / 2; floor.position.y = -.025; floor.receiveShadow = true; scene.add(floor);
 
 const skin = new THREE.MeshStandardMaterial({ color: '#c7a88b', roughness: .82 });
+const anatomicalSkin = skin.clone(); anatomicalSkin.side = THREE.DoubleSide;
 const cloth = new THREE.MeshStandardMaterial({ color: '#ded9cf', roughness: .88, side: THREE.DoubleSide });
+const bodySuitMaterial = new THREE.MeshStandardMaterial({ color: '#c99549', roughness: .84, side: THREE.DoubleSide });
 const fabricMats = new Map();
 const surfaces = new Map();
 function ellipsoid(name, pos, size, mat = skin) {
@@ -50,14 +53,18 @@ function capsuleBetween(name, a, b, radius, mat = skin) {
   const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(radius, Math.max(.01, d.length() - 2 * radius), 6, 16), mat);
   mesh.name = name; mesh.position.copy(va).add(vb).multiplyScalar(.5); mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); mesh.castShadow = true; scene.add(mesh); return mesh;
 }
-function makeSurface(panel, rows, a0, a1, segments = 26) {
+function makeSurface(panel, rows, a0, a1, segments = 26, material = cloth, register = true) {
   const positions = [], uvs = [], indices = [];
   const minY = rows[0].y, height = Math.max(.001, rows.at(-1).y - minY);
   rows.forEach((r, j) => {
     const rowPoints = [], distances = [0]; let length = 0;
     for (let i = 0; i <= segments; i++) {
       const t = i / segments, a = a0 + (a1 - a0) * t;
-      const x = r.cx + r.rx * Math.sin(a), z = r.rz * Math.cos(a);
+      const rz = Math.cos(a) >= 0 ? (r.rzFront ?? r.rz) : (r.rzBack ?? r.rz);
+      const x = r.cx + r.rx * Math.sin(a);
+      const bust = (r.bust || 0) * Math.max(0, Math.cos(a)) *
+        (Math.exp(-(((x - .15) / .18) ** 2)) + Math.exp(-(((x + .15) / .18) ** 2)));
+      const z = rz * Math.cos(a) + bust;
       rowPoints.push([x, z]);
       if (i) { length += Math.hypot(x - rowPoints[i - 1][0], z - rowPoints[i - 1][1]); distances.push(length); }
     }
@@ -71,23 +78,51 @@ function makeSurface(panel, rows, a0, a1, segments = 26) {
     }
   });
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(indices); g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, cloth.clone()); mesh.name = panel; mesh.userData.panel = panel; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); surfaces.set(panel, mesh); return mesh;
+  const mesh = new THREE.Mesh(g, material.clone()); mesh.name = panel; mesh.userData.panel = panel; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); if (register) surfaces.set(panel, mesh); return mesh;
 }
 function taperedTube(curve, lengthSegments, radialSegments, startRadius, endRadius) {
   const g = new THREE.TubeGeometry(curve, lengthSegments, 1, radialSegments, false);
   const pos = g.attributes.position, uv = g.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
-    const t = uv.getX(i), center = curve.getPointAt(t), radius = startRadius + (endRadius - startRadius) * t;
+    const t = uv.getX(i), center = curve.getPointAt(t);
+    let radius;
+    if (Array.isArray(startRadius)) {
+      const scaled = t * (startRadius.length - 1), index = Math.min(startRadius.length - 2, Math.floor(scaled));
+      radius = THREE.MathUtils.lerp(startRadius[index], startRadius[index + 1], scaled - index);
+    } else radius = startRadius + (endRadius - startRadius) * t;
     pos.setXYZ(i, center.x + (pos.getX(i) - center.x) * radius, center.y + (pos.getY(i) - center.y) * radius, center.z + (pos.getZ(i) - center.z) * radius);
   }
   pos.needsUpdate = true; g.computeVertexNormals(); return g;
 }
-// A neutral, softly shaped mannequin beneath a shirt and trousers.
-ellipsoid('body', [0, 2.03, 0], [.48, .75, .25]);
+// The woman's underlying body uses a continuous ring profile, with a separate
+// pelvis, waist, rib cage and shoulder slope rather than a single oval torso.
+let feminineTorsoRows = [];
+if (feminine) {
+  const bodyRows = [
+    { y: 1.23, cx: 0, rx: .29, rz: .24 }, { y: 1.29, cx: 0, rx: .35, rz: .28 },
+    { y: 1.35, cx: 0, rx: .43, rz: .33 }, { y: 1.41, cx: 0, rx: .48, rz: .35 },
+    { y: 1.47, cx: 0, rx: .45, rz: .33 }, { y: 1.54, cx: 0, rx: .38, rz: .28 },
+    { y: 1.62, cx: 0, rx: .33, rz: .24 }, { y: 1.70, cx: 0, rx: .30, rz: .225 },
+    { y: 1.88, cx: 0, rx: .32, rz: .23 }, { y: 2.02, cx: 0, rx: .35, rz: .24 },
+    { y: 2.12, cx: 0, rx: .39, rz: .255 },
+    { y: 2.32, cx: 0, rx: .41, rz: .25 }, { y: 2.49, cx: 0, rx: .45, rz: .23 },
+    { y: 2.57, cx: 0, rx: .39, rz: .205 }, { y: 2.65, cx: 0, rx: .24, rz: .155 },
+    { y: 2.70, cx: 0, rx: .15, rz: .13 }
+  ];
+  feminineTorsoRows = bodyRows;
+} else ellipsoid('body', [0, 2.03, 0], [.48, .75, .25]);
 ellipsoid('head', [0, 3.23, 0], [.25, .32, .24]);
-capsuleBetween('neck', [0, 2.61, 0], [0, 2.99, 0], .105);
+capsuleBetween('neck', [0, 2.61, 0], [0, 2.99, 0], feminine ? .085 : .105);
 // Shirt front and back are separate textile panels around the torso.
-const shirtRows = [
+const shirtRows = feminine ? [
+  { y: .68, cx: 0, rx: .52, rz: .31 }, { y: .82, cx: 0, rx: .53, rz: .315 },
+  { y: 1.00, cx: 0, rx: .52, rz: .31 }, { y: 1.24, cx: 0, rx: .46, rz: .29 },
+  { y: 1.40, cx: 0, rx: .37, rz: .265 }, { y: 1.82, cx: 0, rx: .42, rz: .275 },
+  { y: 2.08, cx: 0, rx: .47, rz: .30 }, { y: 2.27, cx: 0, rx: .49, rz: .305 }, { y: 2.50, cx: 0, rx: .47, rz: .27 },
+  { y: 2.59, cx: 0, rx: .47, rz: .25 }, { y: 2.65, cx: 0, rx: .44, rz: .24 },
+  { y: 2.70, cx: 0, rx: .40, rz: .225 }, { y: 2.75, cx: 0, rx: .32, rz: .20 },
+  { y: 2.79, cx: 0, rx: .23, rz: .17 }, { y: 2.82, cx: 0, rx: .16, rz: .145 }
+] : [
   { y: 1.36, cx: 0, rx: .43, rz: .265 }, { y: 1.48, cx: 0, rx: .48, rz: .285 },
   { y: 1.82, cx: 0, rx: .46, rz: .28 }, { y: 2.27, cx: 0, rx: .53, rz: .285 },
   { y: 2.50, cx: 0, rx: .51, rz: .27 }, { y: 2.59, cx: 0, rx: .48, rz: .255 },
@@ -96,8 +131,10 @@ const shirtRows = [
   { y: 2.75, cx: 0, rx: .34, rz: .205 }, { y: 2.79, cx: 0, rx: .24, rz: .175 },
   { y: 2.82, cx: 0, rx: .17, rz: .15 }
 ];
-makeSurface('shirtFront', shirtRows, -Math.PI / 2, Math.PI / 2);
-makeSurface('shirtBack', shirtRows, Math.PI / 2, Math.PI * 1.5);
+if (!feminine) {
+  makeSurface('shirtFront', shirtRows, -Math.PI / 2, Math.PI / 2);
+  makeSurface('shirtBack', shirtRows, Math.PI / 2, Math.PI * 1.5);
+}
 // Sleeves have their own wrapped textile surfaces and remain independently selectable.
 function makeSleeve(id, sign) {
   // The relaxed arm curves down beside the torso; its sleeve follows the same path.
@@ -108,17 +145,29 @@ function makeSleeve(id, sign) {
     [sign * .80, 1.66, 0], [sign * .84, 1.38, 0]
   ].map(p => new THREE.Vector3(...p));
   const curve = new THREE.CatmullRomCurve3(points);
-  const sleeve = new THREE.Mesh(taperedTube(curve, 48, 24, .17, .135), cloth.clone());
-  sleeve.name = id; sleeve.userData.panel = id; sleeve.castShadow = true; sleeve.receiveShadow = true;
-  scene.add(sleeve); surfaces.set(id, sleeve);
-  const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, .105, 16, false), skin);
-  arm.name = `${id}Arm`; arm.castShadow = true; scene.add(arm);
+  if (!feminine) {
+    const sleeve = new THREE.Mesh(taperedTube(curve, 48, 24, .17, .135), cloth.clone());
+    sleeve.name = id; sleeve.userData.panel = id; sleeve.castShadow = true; sleeve.receiveShadow = true;
+    scene.add(sleeve); surfaces.set(id, sleeve);
+    const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, .105, 16, false), skin);
+    arm.name = `${id}Arm`; arm.castShadow = true; scene.add(arm);
+  }
+  if (feminine) {
+    const shoulder = ellipsoid(`${id}ShoulderCap`, [sign * .40, 2.48, 0], [.18, .20, .17]);
+    shoulder.material = skin;
+  }
   ellipsoid(`${id}Hand`, [sign * .88, 1.25, 0], [.13, .16, .12]);
 }
 makeSleeve('leftSleeve', -1); makeSleeve('rightSleeve', 1);
 // Two tapered legs, with separate front and back cloth panels on each leg.
 for (const [id, cx] of [['left', -.235], ['right', .235]]) {
-  const rows = [
+  const rows = feminine ? [
+    { y: .12, cx: cx * .90, rx: .12, rz: .135 }, { y: .28, cx: cx * .94, rx: .135, rz: .145 },
+    { y: .48, cx: cx * .98, rx: .175, rz: .175 }, { y: .68, cx: cx * 1.02, rx: .155, rz: .16 },
+    { y: .88, cx: cx * 1.02, rx: .19, rz: .19 }, { y: 1.08, cx: cx * .86, rx: .23, rz: .215 },
+    { y: 1.25, cx: cx * .72, rx: .275, rz: .235 }, { y: 1.43, cx: cx * .80, rx: .31, rz: .26 },
+    { y: 1.53, cx: cx * .90, rx: .30, rz: .25 }
+  ] : [
     { y: .12, cx, rx: .17, rz: .18 }, { y: .48, cx, rx: .175, rz: .185 },
     { y: .86, cx, rx: .205, rz: .205 }, { y: 1.25, cx, rx: .24, rz: .22 },
     { y: 1.48, cx, rx: .245, rz: .22 }
@@ -131,15 +180,18 @@ for (const [id, cx] of [['left', -.235], ['right', .235]]) {
     denseRows.push({ y, cx: a.cx + (b.cx - a.cx) * t, rx: a.rx + (b.rx - a.rx) * t + .012 + kneeEase, rz: a.rz + (b.rz - a.rz) * t + .012 + kneeEase });
   }
   denseRows.push({ ...rows.at(-1), rx: rows.at(-1).rx + .012, rz: rows.at(-1).rz + .012 });
-  makeSurface(`${id}LegFront`, denseRows, -Math.PI / 2, Math.PI / 2);
-  makeSurface(`${id}LegBack`, denseRows, Math.PI / 2, Math.PI * 1.5);
-  capsuleBetween(`${id}leg`, [cx, .08, 0], [cx, .58, 0], .12);
-  ellipsoid(`${id}foot`, [cx, .09, .13], [.14, .085, .27]);
+  if (!feminine) {
+    makeSurface(`${id}LegFront`, denseRows, -Math.PI / 2, Math.PI / 2);
+    makeSurface(`${id}LegBack`, denseRows, Math.PI / 2, Math.PI * 1.5);
+  }
+  if (!feminine) capsuleBetween(`${id}leg`, [cx, .08, 0], [cx, .58, 0], .12);
+  ellipsoid(`${id}foot`, [cx, .09, .14], feminine ? [.16, .095, .29] : [.14, .085, .27]);
 }
 // Shirt collar and a quiet center seam give the plain mannequin a readable outfit shape.
-const collar = new THREE.Mesh(new THREE.TorusGeometry(.15, .022, 10, 48), new THREE.MeshStandardMaterial({ color: '#c7c1b6', roughness: .9 }));
-collar.position.set(0, 2.82, 0); collar.rotation.x = Math.PI / 2; scene.add(collar);
-const seam = new THREE.Mesh(new THREE.BoxGeometry(.012, 1.18, .012), new THREE.MeshStandardMaterial({ color: '#bdb6aa' })); seam.position.set(0, 2.0, .252); scene.add(seam);
+const collar = feminine ? null : new THREE.Mesh(new THREE.TorusGeometry(.15, .022, 10, 48), new THREE.MeshStandardMaterial({ color: '#c7c1b6', roughness: .9 }));
+if (collar) { collar.position.set(0, 2.82, 0); collar.rotation.x = Math.PI / 2; scene.add(collar); }
+const seam = feminine ? null : new THREE.Mesh(new THREE.BoxGeometry(.012, 1.18, .012), new THREE.MeshStandardMaterial({ color: '#bdb6aa' }));
+if (seam) { seam.position.set(0, 2.0, .252); scene.add(seam); }
 // Add invisible pivots around the existing geometry so the mannequin keeps its
 // current shape and neutral pose while allowing simple joint rotations.
 function makeJoint(name, position, objectNames) {
@@ -151,10 +203,10 @@ function makeJoint(name, position, objectNames) {
 const joints = {
   torso: makeJoint('torsoPivot', [0, 1.36, 0], []),
   head: makeJoint('headJoint', [0, 2.99, 0], ['head']),
-  leftArm: makeJoint('leftShoulder', [-.36, 2.57, 0], ['leftSleeve', 'leftSleeveArm', 'leftSleeveHand']),
-  rightArm: makeJoint('rightShoulder', [.36, 2.57, 0], ['rightSleeve', 'rightSleeveArm', 'rightSleeveHand']),
-  leftLeg: makeJoint('leftHip', [-.235, 1.45, 0], ['leftLegFront', 'leftLegBack', 'leftleg', 'leftfoot']),
-  rightLeg: makeJoint('rightHip', [.235, 1.45, 0], ['rightLegFront', 'rightLegBack', 'rightleg', 'rightfoot']),
+  leftArm: makeJoint('leftShoulder', [-.36, 2.57, 0], ['leftSleeve', 'leftSleeveArm', 'leftSleeveHand', 'leftSleeveShoulderCap']),
+  rightArm: makeJoint('rightShoulder', [.36, 2.57, 0], ['rightSleeve', 'rightSleeveArm', 'rightSleeveHand', 'rightSleeveShoulderCap']),
+  leftLeg: makeJoint('leftHip', [feminine ? -.27 : -.235, feminine ? 1.60 : 1.45, 0], [feminine ? 'leftlegSkin' : 'leftLegFront', ...(feminine ? [] : ['leftLegBack']), 'leftleg', 'leftfoot']),
+  rightLeg: makeJoint('rightHip', [feminine ? .27 : .235, feminine ? 1.60 : 1.45, 0], [feminine ? 'rightlegSkin' : 'rightLegFront', ...(feminine ? [] : ['rightLegBack']), 'rightleg', 'rightfoot']),
   neck: makeJoint('neckJoint', [0, 2.61, 0], ['neck'])
 };
 joints.neck.attach(joints.head);function bone(parent, name, position) { const b = new THREE.Bone(); b.name = name; b.position.set(...position); parent.add(b); return b; }
@@ -194,40 +246,192 @@ const spineRig = (() => {
     const mesh = new THREE.SkinnedMesh(geometry, source.material); mesh.name = name; mesh.castShadow = true; mesh.receiveShadow = true;
     source.parent.remove(source); joints.torso.add(mesh); joints.torso.updateMatrixWorld(true); mesh.bind(skeleton); source.geometry.dispose(); return mesh;
   }
-  for (const name of ['body', 'shirtFront', 'shirtBack', 'seam']) {
+  for (const name of feminine ? [] : ['body', 'shirtFront', 'shirtBack', 'seam']) {
     const mesh = skinTorso(name);
     if (mesh && (name === 'shirtFront' || name === 'shirtBack')) surfaces.set(name, mesh);
   }
   return { root, mid, chest, skeleton };
 })();
-spineRig.chest.attach(collar);
+if (collar) spineRig.chest.attach(collar);
+if (feminine) {
+}
 const armRigs = {};
 for (const [side, sign, group] of [['left', -1, joints.leftArm], ['right', 1, joints.rightArm]]) {
   const root = bone(group, `${side}ArmRoot`, [0, 0, 0]);
   const elbow = bone(root, `${side}Elbow`, [sign * .30, -.55, 0]);
   const wrist = bone(elbow, `${side}Wrist`, [sign * .18, -.64, 0]);
   group.updateMatrixWorld(true);
+  if (feminine) elbow.attach(ellipsoid(`${side}ElbowCap`, [sign * .66, 2.02, 0], [.105, .12, .115]));
   const skeleton = new THREE.Skeleton([root, elbow, wrist]); skeleton.calculateInverses();
-  const sleeve = skinnedCopy(scene.getObjectByName(`${side}Sleeve`), group, skeleton, 1, -.55);
-  surfaces.set(`${side}Sleeve`, sleeve);
-  skinnedCopy(scene.getObjectByName(`${side}SleeveArm`), group, skeleton, 1, -.55);
+  if (feminine) {
+    const upper = capsuleBetween(`${side}UpperArmSkin`, [sign * .36, 2.57, 0], [sign * .66, 2.02, 0], .125);
+    root.attach(upper);
+    const lower = capsuleBetween(`${side}LowerArmSkin`, [sign * .66, 2.02, 0], [sign * .84, 1.38, 0], .095);
+    elbow.attach(lower);
+  } else {
+    const sleeve = skinnedCopy(scene.getObjectByName(`${side}Sleeve`), group, skeleton, 1, -.55);
+    surfaces.set(`${side}Sleeve`, sleeve);
+    skinnedCopy(scene.getObjectByName(`${side}SleeveArm`), group, skeleton, 1, -.55);
+  }
   const hand = scene.getObjectByName(`${side}SleeveHand`); if (hand) wrist.attach(hand);
   armRigs[side] = { root, elbow, wrist, upperLength: Math.hypot(.30, .55), lowerLength: Math.hypot(.18, .64), upperBase: Math.atan2(-.55, sign * .30), lowerBase: Math.atan2(-.64, sign * .18) };
 }
 const legRigs = {};
 for (const [side, group] of [['left', joints.leftLeg], ['right', joints.rightLeg]]) {
   const root = bone(group, `${side}LegRoot`, [0, 0, 0]);
-  const knee = bone(root, `${side}Knee`, [0, -.76, 0]);
-  const ankle = bone(knee, `${side}Ankle`, [0, -.60, 0]);
+  const thighLength = feminine ? .84 : .76, calfLength = feminine ? .67 : .60;
+  const knee = bone(root, `${side}Knee`, [0, -thighLength, 0]);
+  const ankle = bone(knee, `${side}Ankle`, [0, -calfLength, 0]);
   group.updateMatrixWorld(true);
   const skeleton = new THREE.Skeleton([root, knee, ankle]); skeleton.calculateInverses();
-  for (const panel of ['LegFront', 'LegBack']) surfaces.set(`${side}${panel}`, skinnedCopy(scene.getObjectByName(`${side}${panel}`), group, skeleton, 1, -.86));
-  skinnedCopy(scene.getObjectByName(`${side}leg`), group, skeleton, 1, -.76);
+  if (feminine) {
+    const cx = side === 'left' ? -.27 : .27;
+    const calf = capsuleBetween(`${side}CalfSkin`, [cx, .76, 0], [cx, .09, 0], .14);
+    knee.attach(calf);
+    const kneecap = ellipsoid(`${side}Kneecap`, [cx, .76, .12], [.145, .145, .12]);
+    knee.attach(kneecap);
+  } else {
+    for (const panel of ['LegFront', 'LegBack']) surfaces.set(`${side}${panel}`, skinnedCopy(scene.getObjectByName(`${side}${panel}`), group, skeleton, 1, -.86));
+    skinnedCopy(scene.getObjectByName(`${side}leg`), group, skeleton, 1, -.76);
+  }
   const foot = scene.getObjectByName(`${side}foot`); if (foot) ankle.attach(foot);
-  legRigs[side] = { root, knee, ankle, upperLength: .76, lowerLength: .60, upperBase: -Math.PI / 2, lowerBase: -Math.PI / 2 };
+  legRigs[side] = { root, knee, ankle, upperLength: thighLength, lowerLength: calfLength, upperBase: -Math.PI / 2, lowerBase: -Math.PI / 2 };
 }
 spineRig.root.attach(joints.leftLeg); spineRig.root.attach(joints.rightLeg);
 spineRig.chest.attach(joints.leftArm); spineRig.chest.attach(joints.rightArm); spineRig.chest.attach(joints.neck);
+function createUnifiedBodysuit() {
+  const rows = feminineTorsoRows.filter(row => row.y <= 2.65);
+  if (!rows.length) return;
+  const smoothUnion = (a, b, k) => {
+    const h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.min(a, b) - h * h * k * .25;
+  };
+  const smoothMax = (a, b, k) => -smoothUnion(-a, -b, k);
+  const ellipsoidDistance = (x, y, z, cx, cy, cz, rx, ry, rz) => {
+    const dx = x - cx, dy = y - cy, dz = z - cz;
+    const k0 = Math.hypot(dx / rx, dy / ry, dz / rz);
+    const k1 = Math.hypot(dx / (rx * rx), dy / (ry * ry), dz / (rz * rz));
+    return k1 ? k0 * (k0 - 1) / k1 : -Math.min(rx, ry, rz);
+  };
+  const capsuleDistance = (x, y, z, ax, ay, az, bx, by, bz, ra, rb) => {
+    const vx = bx - ax, vy = by - ay, vz = bz - az;
+    const t = THREE.MathUtils.clamp(((x - ax) * vx + (y - ay) * vy + (z - az) * vz) / (vx * vx + vy * vy + vz * vz), 0, 1);
+    return Math.hypot(x - ax - vx * t, y - ay - vy * t, z - az - vz * t) - THREE.MathUtils.lerp(ra, rb, t);
+  };
+  const torsoDistance = (x, y, z) => {
+    let a = rows[0], b = rows.at(-1);
+    if (y <= a.y) b = a;
+    else if (y >= b.y) a = b;
+    else for (let i = 0; i < rows.length - 1; i++) if (y >= rows[i].y && y <= rows[i + 1].y) { a = rows[i]; b = rows[i + 1]; break; }
+    const t = a === b ? 0 : (y - a.y) / (b.y - a.y);
+    const rx = THREE.MathUtils.lerp(a.rx, b.rx, t), rz = THREE.MathUtils.lerp(a.rz, b.rz, t);
+    const radial = (Math.hypot(x / rx, z / rz) - 1) * Math.min(rx, rz);
+    const vertical = Math.max(rows[0].y - y, y - rows.at(-1).y);
+    return Math.hypot(Math.max(radial, 0), Math.max(vertical, 0)) + Math.min(Math.max(radial, vertical), 0);
+  };
+  const field = (x, y, z) => {
+    let d = torsoDistance(x, y, z);
+    // Sculpt the bust and seat into the garment surface itself so no body
+    // spheres poke through a second, mismatched shell.
+    for (const sign of [-1, 1]) {
+      d = smoothUnion(d, ellipsoidDistance(x, y, z, sign * .15, 2.18, .19, .215, .195, .155), .055);
+      d = smoothUnion(d, ellipsoidDistance(x, y, z, sign * .20, 1.36, -.17, .30, .27, .23), .04);
+      // The lower capsule endpoint is raised by one radius so its rounded hem
+      // lands at the requested mid-thigh height instead of extending to the knee.
+      d = smoothUnion(d, capsuleDistance(x, y, z, sign * .27, 1.59, 0, sign * .27, 1.08, 0, .245, .24), .018);
+    }
+    // A restrained center crease keeps the touching thigh volumes individually readable.
+    const thighCrease = capsuleDistance(x, y, z, 0, 1.34, 0, 0, 1.08, 0, .018, .018);
+    d = smoothMax(d, -thighCrease, .012);
+    // Remove a shallow neck opening; the widened shoulder slope forms the trapezius.
+    const neckOpening = capsuleDistance(x, y, z, 0, 2.47, 0, 0, 2.84, 0, .145, .145);
+    return smoothMax(d - .012, -neckOpening, .025);
+  };
+
+  const min = [-.88, .68, -.78], max = [.88, 2.82, .78], step = .03;
+  const nx = Math.ceil((max[0] - min[0]) / step), ny = Math.ceil((max[1] - min[1]) / step), nz = Math.ceil((max[2] - min[2]) / step);
+  const dx = (max[0] - min[0]) / nx, dy = (max[1] - min[1]) / ny, dz = (max[2] - min[2]) / nz;
+  const sx = nx + 1, sy = ny + 1, count = sx * sy * (nz + 1), samples = new Float32Array(count), coords = new Float32Array(count * 3);
+  const gridId = (i, j, k) => i + sx * (j + sy * k);
+  for (let k = 0; k <= nz; k++) for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) {
+    const id = gridId(i, j, k), x = min[0] + i * dx, y = min[1] + j * dy, z = min[2] + k * dz;
+    coords[id * 3] = x; coords[id * 3 + 1] = y; coords[id * 3 + 2] = z; samples[id] = field(x, y, z);
+  }
+  const positions = [], indices = [], edgeVertices = new Map();
+  const edgeVertex = (idA, idB) => {
+    const lo = Math.min(idA, idB), hi = Math.max(idA, idB), key = lo * count + hi;
+    if (edgeVertices.has(key)) return edgeVertices.get(key);
+    const va = samples[idA], vb = samples[idB], t = va / (va - vb), n = positions.length / 3;
+    positions.push(
+      THREE.MathUtils.lerp(coords[idA * 3], coords[idB * 3], t),
+      THREE.MathUtils.lerp(coords[idA * 3 + 1], coords[idB * 3 + 1], t),
+      THREE.MathUtils.lerp(coords[idA * 3 + 2], coords[idB * 3 + 2], t)
+    );
+    edgeVertices.set(key, n); return n;
+  };
+  const tets = [[0, 5, 1, 6], [0, 1, 2, 6], [0, 2, 3, 6], [0, 3, 7, 6], [0, 7, 4, 6], [0, 4, 5, 6]];
+  const emitTriangle = (a, b, c, inside, outside) => {
+    const centroid = ids => {
+      const v = new THREE.Vector3();
+      ids.forEach(id => v.add(new THREE.Vector3(coords[id*3], coords[id*3+1], coords[id*3+2])));
+      return v.multiplyScalar(1 / ids.length);
+    };
+    const outward = centroid(outside).sub(centroid(inside));
+    const pa = new THREE.Vector3(positions[a*3], positions[a*3+1], positions[a*3+2]);
+    const pb = new THREE.Vector3(positions[b*3], positions[b*3+1], positions[b*3+2]);
+    const pc = new THREE.Vector3(positions[c*3], positions[c*3+1], positions[c*3+2]);
+    if (pb.sub(pa).cross(pc.sub(pa)).dot(outward) < 0) [b, c] = [c, b];
+    indices.push(a, b, c);
+  };
+  const emitTet = tet => {
+    const inside = tet.filter(id => samples[id] < 0), outside = tet.filter(id => samples[id] >= 0);
+    if (!inside.length || !outside.length) return;
+    if (inside.length === 1) {
+      emitTriangle(edgeVertex(inside[0], outside[0]), edgeVertex(inside[0], outside[1]), edgeVertex(inside[0], outside[2]), inside, outside);
+    } else if (inside.length === 3) {
+      emitTriangle(edgeVertex(outside[0], inside[0]), edgeVertex(outside[0], inside[1]), edgeVertex(outside[0], inside[2]), inside, outside);
+    } else {
+      const ac = edgeVertex(inside[0], outside[0]), ad = edgeVertex(inside[0], outside[1]);
+      const bc = edgeVertex(inside[1], outside[0]), bd = edgeVertex(inside[1], outside[1]);
+      emitTriangle(ac, ad, bc, inside, outside); emitTriangle(ad, bd, bc, inside, outside);
+    }
+  };
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const c = [gridId(i,j,k), gridId(i+1,j,k), gridId(i+1,j+1,k), gridId(i,j+1,k), gridId(i,j,k+1), gridId(i+1,j,k+1), gridId(i+1,j+1,k+1), gridId(i,j+1,k+1)];
+    if (Math.min(...c.map(id => samples[id])) > 0 || Math.max(...c.map(id => samples[id])) < 0) continue;
+    for (const tet of tets) emitTet(tet.map(i => c[i]));
+  }
+  const vertexCount = positions.length / 3, skinIndices = new Uint16Array(vertexCount * 4), skinWeights = new Float32Array(vertexCount * 4);
+  const smoothstep = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const bones = [spineRig.root, spineRig.mid, spineRig.chest, legRigs.left.root, legRigs.left.knee, legRigs.left.ankle, legRigs.right.root, legRigs.right.knee, legRigs.right.ankle];
+  for (let i = 0; i < vertexCount; i++) {
+    const x = positions[i * 3], y = positions[i * 3 + 1];
+    let influences = [];
+    if (y >= 1.68) {
+      const localY = y - 1.36;
+      if (localY < .48) influences = [[0, 1 - localY / .48], [1, localY / .48]];
+      else if (localY < 1.03) influences = [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]];
+      else influences = [[2, 1]];
+    } else {
+      const thighArea = smoothstep(.09, .24, Math.abs(x));
+      const hipBlend = (1 - smoothstep(1.34, 1.68, y)) * thighArea, leftShare = THREE.MathUtils.clamp(.5 - x / .16, 0, 1), rightShare = 1 - leftShare;
+      const torsoShare = 1 - hipBlend;
+      const localY = THREE.MathUtils.clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48, midShare = localY / .48;
+      influences = [[0, torsoShare * rootShare], [1, torsoShare * midShare], [3, hipBlend * leftShare], [6, hipBlend * rightShare]];
+    }
+    influences = influences.filter(([,w]) => w > .001).sort((a,b) => b[1]-a[1]).slice(0,4);
+    const total = influences.reduce((sum, [,w]) => sum + w, 0) || 1;
+    influences.forEach(([boneIndex, weight], n) => { skinIndices[i * 4 + n] = boneIndex; skinWeights[i * 4 + n] = weight / total; });
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+  geometry.setIndex(indices); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
+  const suitSkeleton = new THREE.Skeleton(bones); scene.updateMatrixWorld(true); suitSkeleton.calculateInverses();
+  const suit = new THREE.SkinnedMesh(geometry, bodySuitMaterial); suit.name = 'womanBodysuit'; suit.castShadow = true; suit.receiveShadow = true; suit.frustumCulled = false; scene.add(suit); scene.updateMatrixWorld(true); suit.bind(suitSkeleton);
+}
+if (feminine) createUnifiedBodysuit();
 const poseObjects = {
   torso: joints.torso, head: joints.head, neck: joints.neck,
   waist: spineRig.root, midSpine: spineRig.mid, chest: spineRig.chest,
