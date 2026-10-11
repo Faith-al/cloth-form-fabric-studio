@@ -443,6 +443,100 @@ function createUnifiedBodysuit() {
   const suit = new THREE.SkinnedMesh(geometry, bodySuitMaterial); suit.name = 'womanBodysuit'; suit.castShadow = true; suit.receiveShadow = true; suit.frustumCulled = false; scene.add(suit); scene.updateMatrixWorld(true); suit.bind(suitSkeleton);
 }
 if (feminine) createUnifiedBodysuit();
+
+// A plain, empty dress shape for the woman: fitted off-shoulder column dress to mid-calf with balloon
+// sleeves. It has no pattern or colour of its own and is not a selectable textile panel.
+let womanDress = null;
+function createFemaleDress() {
+  const dressMaterial = new THREE.MeshStandardMaterial({ color: '#e7e4de', roughness: .92, side: THREE.DoubleSide });
+  const smoothstep = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  // Outline knots, top to bottom: y, half-width, front depth, back depth.
+  const knots = [
+    [2.46, .485, .285, .285], [2.32, .46, .38, .295], [2.20, .445, .40, .30], [2.10, .43, .39, .30],
+    [2.00, .395, .33, .29], [1.90, .37, .28, .28], [1.80, .365, .275, .275], [1.70, .45, .28, .28],
+    [1.60, .535, .29, .365], [1.50, .575, .305, .42], [1.40, .59, .315, .44], [1.30, .575, .305, .44],
+    [1.20, .56, .295, .415], [1.10, .55, .285, .35], [1.00, .545, .275, .29], [.90, .495, .25, .23],
+    [.76, .46, .27, .215], [.60, .44, .22, .20], [.45, .43, .19, .19]
+  ];
+  const cr = (k, t, c) => { // Catmull-Rom through knot column c at fractional index t
+    const i = Math.min(k.length - 2, Math.floor(t)), f = t - i;
+    const p0 = k[Math.max(0, i - 1)][c], p1 = k[i][c], p2 = k[i + 1][c], p3 = k[Math.min(k.length - 1, i + 2)][c];
+    return .5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
+  };
+  const rows = [], rowCount = 64, segments = 40;
+  for (let r = 0; r < rowCount; r++) {
+    const t = r / (rowCount - 1) * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(t)), f = t - i;
+    rows.push({ y: THREE.MathUtils.lerp(knots[i][0], knots[i + 1][0], f), rx: cr(knots, t, 1), rzF: cr(knots, t, 2), rzB: cr(knots, t, 3) });
+  }
+  const positions = [], indices = [], skinIndices = [], skinWeights = [];
+  rows.forEach((row, j) => {
+    for (let s = 0; s < segments; s++) {
+      const a = s / segments * Math.PI * 2, c = Math.cos(a);
+      let y = row.y;
+      // Round, slightly lower neckline at the front; the edge rises a little at the back.
+      const top = smoothstep(2.30, 2.46, row.y);
+      y -= top * (c > 0 ? .07 * c : .02 * c);
+      // Slightly squared ring (superellipse) so the flat fronts of the thighs and the bust stay inside the cloth.
+      const sn = Math.sin(a), squarish = (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
+      const x = row.rx * sn * squarish, z = (c >= 0 ? row.rzF : row.rzB) * c * squarish;
+      positions.push(x, y, z);
+      let inf;
+      if (y >= 1.68) {
+        const localY = y - 1.36;
+        inf = localY < .48 ? [[0, 1 - localY / .48], [1, localY / .48]] : localY < 1.03 ? [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]] : [[2, 1]];
+      } else {
+        // Below the waist the skirt is one column that follows both legs equally, with a gentle bias
+        // toward the nearer leg at the hip. Separate leg weights would tear a tight skirt apart.
+        const torsoShare = smoothstep(1.38, 1.80, y), legShare = 1 - torsoShare;
+        const bias = smoothstep(.95, 1.4, y), left = .5 + (THREE.MathUtils.clamp(.5 - x / .5, 0, 1) - .5) * .75 * bias, right = 1 - left;
+        const hipW = smoothstep(.62, .90, y), kneeW = 1 - hipW;
+        const localY = THREE.MathUtils.clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
+        inf = [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
+          [3, legShare * hipW * left], [6, legShare * hipW * right], [4, legShare * kneeW * left], [7, legShare * kneeW * right]];
+      }
+      inf = inf.filter(([, w]) => w > .001).sort((p, q) => q[1] - p[1]).slice(0, 4);
+      const total = inf.reduce((sum, [, w]) => sum + w, 0) || 1;
+      for (let n = 0; n < 4; n++) { skinIndices.push(inf[n] ? inf[n][0] : 0); skinWeights.push(inf[n] ? inf[n][1] / total : 0); }
+      if (j < rows.length - 1) {
+        const n = j * segments + s, nextS = j * segments + (s + 1) % segments, below = n + segments, belowNext = nextS + segments;
+        indices.push(n, below, nextS, nextS, below, belowNext);
+      }
+    }
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+  geometry.setIndex(indices); geometry.computeVertexNormals();
+  const bones = [spineRig.root, spineRig.mid, spineRig.chest, legRigs.left.root, legRigs.left.knee, legRigs.left.ankle, legRigs.right.root, legRigs.right.knee, legRigs.right.ankle];
+  const skeleton = new THREE.Skeleton(bones); scene.updateMatrixWorld(true); skeleton.calculateInverses();
+  const body = new THREE.SkinnedMesh(geometry, dressMaterial); body.name = 'womanDress'; body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false;
+  scene.add(body); scene.updateMatrixWorld(true); body.bind(skeleton);
+  const parts = [body];
+  // Balloon sleeves: full and soft over the upper arm and forearm, gathered at the wrist.
+  for (const [side, sign] of [['left', -1], ['right', 1]]) {
+    const curve = new THREE.CatmullRomCurve3([[.40, 2.50, 0], [.52, 2.30, 0], [.66, 2.02, 0], [.76, 1.70, 0], [.83, 1.47, 0], [.845, 1.36, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
+    const geo = taperedTube(curve, 28, 24, [.175, .2, .21, .195, .14, .11], 0);
+    const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
+    const rig = armRigs[side];
+    for (let v = 0; v < pos.count; v++) {
+      const y = pos.getY(v), k = v * 4;
+      // bones: 0 chest, 1 shoulder, 2 elbow
+      const top = 1 - smoothstep(2.30, 2.52, y), toElbow = smoothstep(2.20, 1.86, y);
+      const chest = (1 - top) * .6, shoulder = top * (1 - toElbow) + (1 - top) * .4 * (1 - toElbow), elbow = toElbow;
+      const parts3 = [[0, chest], [1, Math.max(0, shoulder)], [2, elbow]];
+      const total = parts3.reduce((sum, [, w]) => sum + w, 0) || 1;
+      parts3.forEach(([b, w], n) => { idx[k + n] = b; wts[k + n] = w / total; });
+    }
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4));
+    const sleeve = new THREE.SkinnedMesh(geo, dressMaterial); sleeve.name = `womanDress${side}Sleeve`; sleeve.castShadow = true; sleeve.receiveShadow = true; sleeve.frustumCulled = false;
+    scene.add(sleeve); scene.updateMatrixWorld(true);
+    const sk = new THREE.Skeleton([spineRig.chest, rig.root, rig.elbow]); sk.calculateInverses(); sleeve.bind(sk);
+    parts.push(sleeve);
+  }
+  womanDress = parts;
+}
+if (feminine) createFemaleDress();
 const poseObjects = {
   torso: joints.torso, head: joints.head, neck: joints.neck,
   waist: spineRig.root, midSpine: spineRig.mid, chest: spineRig.chest,
@@ -552,6 +646,7 @@ new ResizeObserver(resize).observe(stage); resize();
 function frame() { requestAnimationFrame(frame); controls.update(); renderer.render(scene, camera); }
 frame();
 window.Cloth3D = {
+  setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
   select(id) { surfaces.forEach((m, key) => { m.material.emissive.set(key === id ? '#514237' : '#000000'); m.material.emissiveIntensity = key === id ? .12 : 0; }); },
   setTexture(id, data) {
     const loader = new THREE.TextureLoader(); loader.load(data, texture => {
