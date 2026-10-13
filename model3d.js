@@ -591,16 +591,18 @@ function createHeadtie() {
     });
     stripV += width;
   }
-  // Small bunched cloth cap at the back of the head, inside the fan. Its gathered point sits low, toward
-  // the nape, where the pleat ends are tucked in.
-  const capCentre = [0, 3.20, -.13], down = THREE.MathUtils.degToRad(32);
-  const capAxis = [0, -Math.sin(down), -Math.cos(down)], capUp = [0, Math.cos(down), -Math.sin(down)];
+  // Small bunched cloth cap at the back of the head, tucked just behind the fan. Its rim lies against the
+  // fan; it bulges back in a soft rounded shape, gathered low toward the nape where the pleat ends meet.
+  const capCentre = [0, 3.25, -.14], gather = [0, -.24, -.15];
   grid(12, 80, (t, c) => {
-    const phi = t * Math.PI / 2, open = THREE.MathUtils.degToRad(118), psi = -open + 2 * open * c;
-    const crumple = 1 + .06 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .035 * Math.sin(9 * psi - 2 * phi);
-    const side = .28 * crumple * Math.sin(phi) * Math.sin(psi), upward = .46 * crumple * Math.sin(phi) * Math.cos(psi), depth = .19 * crumple * Math.cos(phi);
-    const pos = [0, 1, 2].map(k => capCentre[k] + (k === 0 ? side : 0) + upward * capUp[k] + depth * capAxis[k]);
-    return [...pos, psi * .35 + 3, stripV + .2 + t * .5];
+    const phi = t * Math.PI / 2, psi = c * Math.PI * 2;
+    const crumple = 1 + .05 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .03 * Math.sin(9 * psi - 2 * phi);
+    let x = capCentre[0] + .24 * crumple * Math.sin(phi) * Math.sin(psi);
+    let y = capCentre[1] + (Math.cos(psi) > 0 ? .32 : .2) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
+    let z = capCentre[2] + gather[2] * crumple * Math.cos(phi) - .02 * Math.sin(phi) * (1 - Math.sin(phi));
+    const k = Math.hypot(x / .275, (y - 3.23) / .345, z / .265);
+    if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; z /= k; }
+    return [x, y, z, psi * .35 + 3, stripV + .2 + t * .5];
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
