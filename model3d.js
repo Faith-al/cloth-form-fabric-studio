@@ -544,15 +544,15 @@ function createFemaleDress() {
 }
 if (feminine) createFemaleDress();
 
-// Nigerian gele (headtie), built the way it is tied from one long strip of cloth:
-//  - a smooth wrap pulled tight over the forehead and the skull,
-//  - a fan of accordion pleats that rises up and back behind the head, ring after ring around the back,
-//  - the tucked ends twisted into a knot in the centre of the back.
+// Nigerian gele (headtie), built from one long strip of cloth folded in accordion pleats:
+//  - the first pleats lie flat on the head, from the hairline back over the skull,
+//  - the next pleats rise one by one and spread outward into a fan around the head,
+//  - behind the fan a small bunched cloth cap covers the back of the head.
 // Every pleat is its own band with its own slice of the strip (folds alternate direction), so a fabric
 // pattern breaks from pleat to pleat like a real gele instead of running over it as one picture.
 function createHeadtie() {
   const geleMaterial = new THREE.MeshStandardMaterial({ color: '#e3b021', roughness: .86, side: THREE.DoubleSide });
-  const positions = [], uvs = [], indices = [], tile = .45;
+  const positions = [], uvs = [], indices = [], tile = .45, lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
   const grid = (rows, cols, at) => { // at(r, c) -> [x, y, z, u, v]
     const base = positions.length / 3;
     for (let r = 0; r <= rows; r++) for (let c = 0; c <= cols; c++) {
@@ -560,54 +560,38 @@ function createHeadtie() {
       if (r < rows && c < cols) { const n = base + r * (cols + 1) + c, m = n + cols + 1; indices.push(n, m, n + 1, n + 1, m, m + 1); }
     }
   };
-  const lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
-  const spline = (knots, t) => { // Catmull-Rom through [a, b] knots, t in 0..1
-    const s = clamp(t, 0, 1) * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(s)), f = s - i;
-    const g = n => knots[Math.max(0, Math.min(knots.length - 1, n))];
-    return [0, 1].map(k => { const p0 = g(i - 1)[k], p1 = g(i)[k], p2 = g(i + 1)[k], p3 = g(i + 2)[k];
-      return .5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f); });
+  // Pleat rings around the face axis: radius, depth (z), how far the ring is lifted, how far down the sides it
+  // reaches (degrees from the top), and how much each fold stands out.
+  const rings = [
+    [.255, .19, 0, 120, .006], [.30, .155, 0, 120, .006], [.335, .115, 0, 121, .006], [.36, .065, 0, 122, .006], [.375, .01, 0, 122, .008],
+    [.41, -.03, .025, 118, .016], [.45, -.05, .05, 115, .018], [.49, -.065, .075, 112, .018], [.52, -.08, .10, 108, .018],
+    [.55, -.09, .125, 104, .018], [.575, -.10, .15, 100, .018], [.595, -.11, .17, 96, .018], [.61, -.12, .19, 92, .018], [.62, -.13, .205, 88, .016]
+  ];
+  const cy = 3.17, tall = 1.10, ringAt = t => { // t runs over the rings; fractional values blend neighbours
+    const i = clamp(Math.floor(t), 0, rings.length - 2), f = t - i, a = rings[i], b = rings[i + 1];
+    return [0, 1, 2, 3, 4].map(k => lerp(a[k], b[k], f));
   };
-  // 1. Smooth wrap over the skull, from the crown down to the hairline (low at the back, higher over the ears).
-  const head = [0, 3.23, 0], wrap = [.278, .35, .268];
-  grid(14, 72, (t, c) => {
-    const theta = c * Math.PI * 2, k = 1 - Math.cos(theta);
-    const hairline = 3.39 - .12 * k - .055 * k * k;
-    const phiMax = Math.acos(clamp((hairline - head[1]) / wrap[1], -1, 1)), phi = t * phiMax;
-    return [head[0] + wrap[0] * Math.sin(phi) * Math.sin(theta), head[1] + wrap[1] * Math.cos(phi), head[2] + wrap[2] * Math.sin(phi) * Math.cos(theta),
-      c * 2.1, t * .55];
-  });
-  // 2. Pleated fan around an axis that points back and slightly up from behind the head.
-  const centre = [0, 3.36, -.16], tilt = THREE.MathUtils.degToRad(40);
-  const axis = [0, Math.sin(tilt), -Math.cos(tilt)], up = [0, Math.cos(tilt), Math.sin(tilt)];
-  // Fan profile: ring radius and how far the ring sits back along the axis, from the knot out to the rim.
-  const fan = [[.10, .16], [.18, .15], [.26, .12], [.33, .07], [.38, .0], [.41, -.07], [.42, -.13]];
-  const pleats = 14, ridge = .016;
-  const dense = []; for (let k = 0; k <= 300; k++) { const [r, h] = spline(fan, k / 300), prev = dense.at(-1); dense.push({ r, h, len: prev ? prev.len + Math.hypot(r - prev.r, h - prev.h) : 0 }); }
-  const total = dense.at(-1).len, pleatWidth = total / pleats;
-  const profileAt = len => {
-    len = clamp(len, 0, total); let j = 1; while (j < dense.length - 1 && dense[j].len < len) j++;
-    const a = dense[j - 1], b = dense[j], f = (len - a.len) / Math.max(1e-6, b.len - a.len), dr = b.r - a.r, dh = b.h - a.h, l = Math.hypot(dr, dh) || 1;
-    return { r: lerp(a.r, b.r, f), h: lerp(a.h, b.h, f), nr: dh / l, nh: -dr / l };
-  };
-  for (let p = 0; p < pleats; p++) grid(6, 96, (t, c) => {
-    // Each pleat tucks a little under its neighbours so no gaps open between the folds.
-    const s = -.12 + 1.24 * t, q = profileAt((p + s) * pleatWidth), bulge = ridge * Math.sin(Math.PI * s);
-    const r = q.r + bulge * q.nr, h = q.h + bulge * q.nh;
-    const open = THREE.MathUtils.degToRad(lerp(134, 120, (p + s) / pleats)), psi = -open + 2 * open * c;
-    const fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
-    // The fan stands taller over the crown and keeps closer to the head at the sides.
-    const shape = 1 + .38 * Math.max(Math.cos(psi), 0) ** 1.5 - .1 * Math.sin(psi) ** 2;
-    const pos = [0, 1, 2].map(k => centre[k] + axis[k] * h + r * shape * (Math.cos(psi) * up[k] + Math.sin(psi) * (k === 0 ? 1 : 0)));
-    return [...pos, r * 1.05 * (psi + open), 1.4 + (p + fold) * pleatWidth];
-  });
-  // 3. The ends twisted into a knot at the centre of the back of the fan.
-  const knot = [0, 1, 2].map(k => centre[k] + axis[k] * .19 - up[k] * .06);
-  grid(10, 64, (t, c) => {
-    const a = c * Math.PI * 2, loop = Math.sin(2 * a) * .075, rise = Math.sin(a) * .06;
-    const ring = t * Math.PI * 2, thick = .038 * (1 + .25 * Math.sin(3 * a));
-    const centreLine = [loop + thick * Math.cos(ring), rise + thick * Math.sin(ring), thick * .6 * Math.sin(ring + a)];
-    const pos = [0, 1, 2].map(k => knot[k] + centreLine[0] * (k === 0 ? 1 : 0) + centreLine[1] * up[k] + centreLine[2] * axis[k]);
-    return [...pos, c * .9, 3.2 + t * .25];
+  let stripV = 0;
+  for (let p = 0; p < rings.length - 1; p++) {
+    const width = Math.hypot(rings[p + 1][0] - rings[p][0], rings[p + 1][1] - rings[p][1]);
+    grid(7, 84, (t, c) => {
+      // Each pleat reaches a little under its neighbours so no gaps open between the folds.
+      const s = -.12 + 1.24 * t, [R0, z0, lift, sweepDeg, ridge] = ringAt(p + s);
+      const dR = rings[p + 1][0] - rings[p][0], dz = rings[p + 1][1] - rings[p][1], l = Math.hypot(dR, dz) || 1;
+      const bulge = ridge * Math.sin(Math.PI * s), R = R0 + bulge * -dz / l, z = z0 + bulge * dR / l;
+      const sweep = THREE.MathUtils.degToRad(sweepDeg), psi = -sweep + 2 * sweep * c;
+      const fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
+      return [R * Math.sin(psi), cy + lift + R * tall * Math.cos(psi), z, R * 1.05 * (psi + sweep), stripV + fold * width];
+    });
+    stripV += width;
+  }
+  // Small bunched cloth cap behind the fan, covering the back of the head.
+  const back = [0, 3.25, -.02], capR = [.29, .36, .29];
+  grid(12, 80, (t, c) => {
+    const phi = t * Math.PI / 2, open = THREE.MathUtils.degToRad(150), psi = -open + 2 * open * c;
+    const crumple = 1 + .07 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .04 * Math.sin(9 * psi - 2 * phi);
+    return [back[0] + capR[0] * crumple * Math.sin(phi) * Math.sin(psi), back[1] + capR[1] * crumple * Math.sin(phi) * Math.cos(psi),
+      back[2] - capR[2] * crumple * Math.cos(phi), psi * .35 + 3, stripV + .2 + t * .5];
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
