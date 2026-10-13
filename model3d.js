@@ -106,8 +106,9 @@ if (feminine) {
     { y: 1.88, cx: 0, rx: .32, rz: .23 }, { y: 2.02, cx: 0, rx: .35, rz: .24 },
     { y: 2.12, cx: 0, rx: .39, rz: .255 },
     { y: 2.32, cx: 0, rx: .41, rz: .25 }, { y: 2.49, cx: 0, rx: .45, rz: .23 },
-    { y: 2.57, cx: 0, rx: .39, rz: .205 }, { y: 2.65, cx: 0, rx: .24, rz: .155 },
-    { y: 2.70, cx: 0, rx: .15, rz: .13 }
+    { y: 2.57, cx: 0, rx: .39, rz: .205 }, { y: 2.65, cx: 0, rx: .30, rz: .17 },
+    // Trapezius: the shoulders slope up into the neck and end inside the neck column.
+    { y: 2.72, cx: 0, rx: .20, rz: .135 }, { y: 2.79, cx: 0, rx: .125, rz: .105 }, { y: 2.86, cx: 0, rx: .088, rz: .088 }
   ];
   feminineTorsoRows = bodyRows;
 } else ellipsoid('body', [0, 2.03, 0], [.48, .75, .25]);
@@ -300,7 +301,7 @@ for (const [side, group] of [['left', joints.leftLeg], ['right', joints.rightLeg
 spineRig.root.attach(joints.leftLeg); spineRig.root.attach(joints.rightLeg);
 spineRig.chest.attach(joints.leftArm); spineRig.chest.attach(joints.rightArm); spineRig.chest.attach(joints.neck);
 function createUnifiedBodysuit() {
-  const rows = feminineTorsoRows.filter(row => row.y <= 2.65);
+  const rows = feminineTorsoRows.filter(row => row.y <= 2.90);
   if (!rows.length) return;
   const smoothUnion = (a, b, k) => {
     const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -347,12 +348,10 @@ function createUnifiedBodysuit() {
     d = smoothMax(d, -thighCrease, .012);
     // Soft V-shaped crease where the belly meets each thigh.
     for (const sign of [-1, 1]) d = smoothMax(d, -capsuleDistance(x, y, z, sign * .42, 1.62, .30, sign * .03, 1.30, .29, .05, .05), .035);
-    // Remove a shallow neck opening; the widened shoulder slope forms the trapezius.
-    const neckOpening = capsuleDistance(x, y, z, 0, 2.47, 0, 0, 2.84, 0, .145, .145);
-    return smoothMax(d - .012, -neckOpening, .025);
+    return d - .012;
   };
 
-  const min = [-.88, .68, -.78], max = [.88, 2.82, .78], step = .03;
+  const min = [-.88, .68, -.78], max = [.88, 2.92, .78], step = .03;
   const nx = Math.ceil((max[0] - min[0]) / step), ny = Math.ceil((max[1] - min[1]) / step), nz = Math.ceil((max[2] - min[2]) / step);
   const dx = (max[0] - min[0]) / nx, dy = (max[1] - min[1]) / ny, dz = (max[2] - min[2]) / nz;
   const sx = nx + 1, sy = ny + 1, count = sx * sy * (nz + 1), samples = new Float32Array(count), coords = new Float32Array(count * 3);
@@ -452,6 +451,7 @@ function createFemaleDress() {
   const smoothstep = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   // Outline knots, top to bottom: y, half-width, front depth, back depth.
   const knots = [
+    [2.83, .135, .125, .125], [2.79, .16, .14, .14], [2.72, .235, .17, .17], [2.65, .34, .20, .20], [2.56, .44, .25, .25],
     [2.46, .485, .285, .285], [2.32, .46, .38, .295], [2.20, .445, .40, .30], [2.10, .43, .39, .30],
     [2.00, .395, .33, .29], [1.90, .37, .28, .28], [1.80, .365, .275, .275], [1.70, .45, .28, .28],
     [1.60, .535, .29, .365], [1.50, .575, .305, .42], [1.40, .59, .315, .44], [1.30, .575, .305, .44],
@@ -463,7 +463,7 @@ function createFemaleDress() {
     const p0 = k[Math.max(0, i - 1)][c], p1 = k[i][c], p2 = k[i + 1][c], p3 = k[Math.min(k.length - 1, i + 2)][c];
     return .5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
   };
-  const rows = [], rowCount = 64, segments = 40;
+  const rows = [], rowCount = 90, segments = 40;
   for (let r = 0; r < rowCount; r++) {
     const t = r / (rowCount - 1) * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(t)), f = t - i;
     rows.push({ y: THREE.MathUtils.lerp(knots[i][0], knots[i + 1][0], f), rx: cr(knots, t, 1), rzF: cr(knots, t, 2), rzB: cr(knots, t, 3) });
@@ -473,9 +473,6 @@ function createFemaleDress() {
     for (let s = 0; s < segments; s++) {
       const a = s / segments * Math.PI * 2, c = Math.cos(a);
       let y = row.y;
-      // Round, slightly lower neckline at the front; the edge rises a little at the back.
-      const top = smoothstep(2.30, 2.46, row.y);
-      y -= top * (c > 0 ? .07 * c : .02 * c);
       // Slightly squared ring (superellipse) so the flat fronts of the thighs and the bust stay inside the cloth.
       const sn = Math.sin(a), squarish = (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
       const x = row.rx * sn * squarish, z = (c >= 0 ? row.rzF : row.rzB) * c * squarish;
@@ -515,8 +512,8 @@ function createFemaleDress() {
   const parts = [body];
   // Balloon sleeves: full and soft over the upper arm and forearm, gathered at the wrist.
   for (const [side, sign] of [['left', -1], ['right', 1]]) {
-    const curve = new THREE.CatmullRomCurve3([[.40, 2.50, 0], [.52, 2.30, 0], [.66, 2.02, 0], [.76, 1.70, 0], [.83, 1.47, 0], [.845, 1.36, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
-    const geo = taperedTube(curve, 28, 24, [.175, .2, .21, .195, .14, .11], 0);
+    const curve = new THREE.CatmullRomCurve3([[.32, 2.65, 0], [.49, 2.45, 0], [.58, 2.22, 0], [.66, 2.02, 0], [.76, 1.70, 0], [.83, 1.47, 0], [.845, 1.36, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
+    const geo = taperedTube(curve, 28, 24, [.17, .19, .205, .21, .195, .14, .11], 0);
     const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
     const rig = armRigs[side];
     for (let v = 0; v < pos.count; v++) {
