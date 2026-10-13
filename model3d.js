@@ -451,7 +451,7 @@ function createFemaleDress() {
   const smoothstep = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   // Outline knots, top to bottom: y, half-width, front depth, back depth.
   const knots = [
-    [2.83, .135, .125, .125], [2.79, .16, .14, .14], [2.72, .235, .17, .17], [2.65, .34, .20, .20], [2.56, .44, .25, .25],
+    [2.69, .285, .19, .19], [2.60, .39, .225, .225], [2.54, .44, .25, .25],
     [2.46, .485, .285, .285], [2.32, .46, .38, .295], [2.20, .445, .40, .30], [2.10, .43, .39, .30],
     [2.00, .395, .33, .29], [1.90, .37, .28, .28], [1.80, .365, .275, .275], [1.70, .45, .28, .28],
     [1.60, .535, .29, .365], [1.50, .575, .305, .42], [1.40, .59, .315, .44], [1.30, .575, .305, .44],
@@ -476,6 +476,8 @@ function createFemaleDress() {
       // Slightly squared ring (superellipse) so the flat fronts of the thighs and the bust stay inside the cloth.
       const sn = Math.sin(a), squarish = (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
       const x = row.rx * sn * squarish, z = (c >= 0 ? row.rzF : row.rzB) * c * squarish;
+      // Wide round neckline: the front edge dips below the collarbone, the back stays higher.
+      y -= smoothstep(2.58, 2.69, row.y) * .11 * Math.max(c, 0) ** 2;
       positions.push(x, y, z);
       let inf;
       if (y >= 1.68) {
@@ -512,8 +514,8 @@ function createFemaleDress() {
   const parts = [body];
   // Balloon sleeves: full and soft over the upper arm and forearm, gathered at the wrist.
   for (const [side, sign] of [['left', -1], ['right', 1]]) {
-    const curve = new THREE.CatmullRomCurve3([[.32, 2.65, 0], [.49, 2.45, 0], [.58, 2.22, 0], [.66, 2.02, 0], [.76, 1.70, 0], [.83, 1.47, 0], [.845, 1.36, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
-    const geo = taperedTube(curve, 28, 24, [.17, .19, .205, .21, .195, .14, .11], 0);
+    const curve = new THREE.CatmullRomCurve3([[.30, 2.59, 0], [.43, 2.52, 0], [.54, 2.28, 0], [.66, 2.02, 0], [.76, 1.70, 0], [.83, 1.47, 0], [.845, 1.36, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
+    const geo = taperedTube(curve, 28, 24, [.13, .17, .19, .21, .20, .14, .11], 0);
     const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
     const rig = armRigs[side];
     for (let v = 0; v < pos.count; v++) {
