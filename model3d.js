@@ -41,7 +41,7 @@ floor.rotation.x = -Math.PI / 2; floor.position.y = -.025; floor.receiveShadow =
 const skin = new THREE.MeshStandardMaterial({ color: '#c7a88b', roughness: .82 });
 const anatomicalSkin = skin.clone(); anatomicalSkin.side = THREE.DoubleSide;
 const cloth = new THREE.MeshStandardMaterial({ color: '#ded9cf', roughness: .88, side: THREE.DoubleSide });
-const bodySuitMaterial = new THREE.MeshStandardMaterial({ color: '#c99549', roughness: .84, side: THREE.DoubleSide });
+const bodySuitMaterial = new THREE.MeshStandardMaterial({ color: '#c7a88b', roughness: .82, side: THREE.DoubleSide });
 const fabricMats = new Map();
 const surfaces = new Map();
 function ellipsoid(name, pos, size, mat = skin) {
