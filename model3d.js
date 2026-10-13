@@ -543,6 +543,62 @@ function createFemaleDress() {
   womanDress = parts;
 }
 if (feminine) createFemaleDress();
+
+// Nigerian gele (headtie). It is modelled as one long strip of cloth, folded in accordion pleats that wrap
+// around the face, sweep back over the skull and fan out behind the head. Every pleat is its own band of
+// cloth with its own slice of the strip, so a fabric pattern breaks from pleat to pleat like a real gele.
+function createHeadtie() {
+  const geleMaterial = new THREE.MeshStandardMaterial({ color: '#e3b021', roughness: .86, side: THREE.DoubleSide });
+  // Profile of the gele seen from the side: radius around the face axis (R) and depth (z), from the hairline
+  // in front, back over the head, out into the fan and closing at the back.
+  const knots = [[.25, .19], [.31, .13], [.35, .05], [.38, -.03], [.42, -.09], [.47, -.13], [.52, -.16], [.56, -.19],
+    [.57, -.23], [.52, -.28], [.40, -.31], [.22, -.33], [0, -.34]];
+  const dense = [], samples = 400;
+  for (let k = 0; k <= samples; k++) {
+    const t = k / samples * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(t)), f = t - i;
+    const g = n => knots[Math.max(0, Math.min(knots.length - 1, n))];
+    const p = [0, 1].map(c => { const p0 = g(i - 1)[c], p1 = g(i)[c], p2 = g(i + 1)[c], p3 = g(i + 2)[c];
+      return .5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f); });
+    const prev = dense.at(-1); dense.push({ R: p[0], z: p[1], len: prev ? prev.len + Math.hypot(p[0] - prev.R, p[1] - prev.z) : 0 });
+  }
+  const total = dense.at(-1).len;
+  const at = len => { // position and outward normal on the profile at an arc length
+    len = THREE.MathUtils.clamp(len, 0, total);
+    let j = 1; while (j < dense.length - 1 && dense[j].len < len) j++;
+    const a = dense[j - 1], b = dense[j], f = (len - a.len) / Math.max(1e-6, b.len - a.len);
+    const dR = b.R - a.R, dz = b.z - a.z, l = Math.hypot(dR, dz) || 1;
+    return { R: THREE.MathUtils.lerp(a.R, b.R, f), z: THREE.MathUtils.lerp(a.z, b.z, f), nR: -dz / l, nz: dR / l };
+  };
+  const pleats = 16, across = 7, along = 84, tall = 1.10;
+  const pleatWidth = total / pleats, tile = .45, ridge = .018;
+  const positions = [], uvs = [], indices = [];
+  for (let p = 0; p < pleats; p++) {
+    const base = positions.length / 3;
+    for (let r = 0; r <= across; r++) {
+      // Each pleat reaches a little under its neighbours so no gaps open between the folds.
+      const s = -.1 + 1.2 * r / across, q = at((p + s) * pleatWidth), bulge = ridge * Math.sin(Math.PI * s);
+      const R = Math.max(0, q.R + bulge * q.nR), z = q.z + bulge * q.nz;
+      // Outer pleats sit higher and stop higher at the sides, so the gele rises up and back above the face.
+      const lift = THREE.MathUtils.clamp((p + s) / pleats, 0, 1), cy = 3.17 + .2 * lift, sweep = THREE.MathUtils.degToRad(120 - 24 * lift);
+      // Accordion fold: every other pleat shows the strip's width the other way round.
+      const fold = p % 2 ? 1 - THREE.MathUtils.clamp(s, 0, 1) : THREE.MathUtils.clamp(s, 0, 1);
+      for (let c = 0; c <= along; c++) {
+        const psi = -sweep + 2 * sweep * c / along;
+        positions.push(R * Math.sin(psi), cy + R * tall * Math.cos(psi), z);
+        uvs.push(Math.max(q.R, .05) * 1.06 * (psi + sweep) / tile, (p + fold) * pleatWidth / tile);
+        if (r < across && c < along) { const n = base + r * (along + 1) + c, m = n + along + 1; indices.push(n, m, n + 1, n + 1, m, m + 1); }
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices); geometry.computeVertexNormals();
+  const gele = new THREE.Mesh(geometry, geleMaterial); gele.name = 'headtie'; gele.userData.panel = 'headtie';
+  gele.userData.baseMaterial = geleMaterial; gele.userData.repeatTexture = true; gele.castShadow = true; gele.receiveShadow = true;
+  scene.add(gele); scene.updateMatrixWorld(true); joints.head.attach(gele); surfaces.set('headtie', gele);
+}
+if (feminine) createHeadtie();
 const poseObjects = {
   torso: joints.torso, head: joints.head, neck: joints.neck,
   waist: spineRig.root, midSpine: spineRig.mid, chest: spineRig.chest,
@@ -658,13 +714,15 @@ window.Cloth3D = {
     const loader = new THREE.TextureLoader(); loader.load(data, texture => {
       texture.colorSpace = THREE.SRGBColorSpace;
       // Map the chosen fabric region once across this garment panel.
-      texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+      const target = surfaces.get(id);
+      // A headtie is one long folded strip, so its fabric repeats along the strip instead of stretching once.
+      texture.wrapS = texture.wrapT = target?.userData.repeatTexture ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
       texture.repeat.set(1, 1);
       const mat = new THREE.MeshStandardMaterial({ map: texture, color: '#fff', roughness: .9, side: THREE.DoubleSide });
       fabricMats.get(id)?.dispose(); fabricMats.set(id, mat); const mesh = surfaces.get(id); if (mesh) mesh.material = mat;
     });
   },
-  clear(id) { const mesh = surfaces.get(id); if (mesh) mesh.material = cloth.clone(); fabricMats.get(id)?.dispose(); fabricMats.delete(id); },
+  clear(id) { const mesh = surfaces.get(id); if (mesh) mesh.material = (mesh.userData.baseMaterial || cloth).clone(); fabricMats.get(id)?.dispose(); fabricMats.delete(id); },
   setPoseMode,
   setPoseTool,
   getPose() { return Object.fromEntries(Object.entries(poseObjects).map(([name, object]) => [name, object.rotation.toArray()])); },
