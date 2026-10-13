@@ -563,9 +563,9 @@ function createHeadtie() {
   // Pleat rings around the face axis: radius, depth (z), how far the ring is lifted, how far down the sides it
   // reaches (degrees from the top), and how much each fold stands out.
   const rings = [
-    [.255, .19, 0, 120, .006], [.30, .155, 0, 120, .006], [.335, .115, 0, 121, .006], [.36, .065, 0, 122, .006], [.375, .01, 0, 122, .008],
-    [.41, -.03, .025, 118, .016], [.45, -.05, .05, 115, .018], [.49, -.065, .075, 112, .018], [.52, -.08, .10, 108, .018],
-    [.55, -.09, .125, 104, .018], [.575, -.10, .15, 100, .018], [.595, -.11, .17, 96, .018], [.61, -.12, .19, 92, .018], [.62, -.13, .205, 88, .016]
+    [.24, .14, .08, 150, .007], [.27, .10, .08, 150, .007], [.29, .05, .08, 150, .007], [.30, 0, .08, 150, .007], [.30, -.05, .08, 150, .008],
+    [.35, -.08, .10, 150, .016], [.40, -.10, .12, 150, .018], [.45, -.115, .14, 150, .018], [.49, -.13, .16, 150, .018],
+    [.53, -.14, .18, 150, .018], [.56, -.15, .20, 150, .018], [.585, -.16, .215, 150, .018], [.60, -.17, .23, 150, .018], [.61, -.18, .24, 150, .016]
   ];
   const cy = 3.17, tall = 1.10, ringAt = t => { // t runs over the rings; fractional values blend neighbours
     const i = clamp(Math.floor(t), 0, rings.length - 2), f = t - i, a = rings[i], b = rings[i + 1];
@@ -581,17 +581,26 @@ function createHeadtie() {
       const bulge = ridge * Math.sin(Math.PI * s), R = R0 + bulge * -dz / l, z = z0 + bulge * dR / l;
       const sweep = THREE.MathUtils.degToRad(sweepDeg), psi = -sweep + 2 * sweep * c;
       const fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
-      return [R * Math.sin(psi), cy + lift + R * tall * Math.cos(psi), z, R * 1.05 * (psi + sweep), stripV + fold * width];
+      // Both ends of every pleat run back down behind the ears and meet at the back of the head, by the nape.
+      const e = THREE.MathUtils.smoothstep(Math.abs(psi) / sweep, .4, 1), tuck = e * e;
+      let x = lerp(R * Math.sin(psi), Math.sign(psi) * .05, tuck), y = lerp(cy + lift + R * tall * Math.cos(psi), 2.99, tuck), zz = lerp(z, -.22, e);
+      // Keep the cloth just outside the head while it travels round to the back.
+      const k = Math.hypot(x / .275, (y - 3.23) / .345, zz / .265);
+      if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; zz /= k; }
+      return [x, y, zz, R * 1.05 * (psi + sweep), stripV + fold * width];
     });
     stripV += width;
   }
-  // Small bunched cloth cap behind the fan, covering the back of the head.
-  const back = [0, 3.25, -.02], capR = [.29, .36, .29];
+  // Small bunched cloth cap at the back of the head, inside the fan. Its gathered point sits low, toward
+  // the nape, where the pleat ends are tucked in.
+  const capCentre = [0, 3.20, -.13], down = THREE.MathUtils.degToRad(32);
+  const capAxis = [0, -Math.sin(down), -Math.cos(down)], capUp = [0, Math.cos(down), -Math.sin(down)];
   grid(12, 80, (t, c) => {
-    const phi = t * Math.PI / 2, open = THREE.MathUtils.degToRad(150), psi = -open + 2 * open * c;
-    const crumple = 1 + .07 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .04 * Math.sin(9 * psi - 2 * phi);
-    return [back[0] + capR[0] * crumple * Math.sin(phi) * Math.sin(psi), back[1] + capR[1] * crumple * Math.sin(phi) * Math.cos(psi),
-      back[2] - capR[2] * crumple * Math.cos(phi), psi * .35 + 3, stripV + .2 + t * .5];
+    const phi = t * Math.PI / 2, open = THREE.MathUtils.degToRad(118), psi = -open + 2 * open * c;
+    const crumple = 1 + .06 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .035 * Math.sin(9 * psi - 2 * phi);
+    const side = .28 * crumple * Math.sin(phi) * Math.sin(psi), upward = .46 * crumple * Math.sin(phi) * Math.cos(psi), depth = .19 * crumple * Math.cos(phi);
+    const pos = [0, 1, 2].map(k => capCentre[k] + (k === 0 ? side : 0) + upward * capUp[k] + depth * capAxis[k]);
+    return [...pos, psi * .35 + 3, stripV + .2 + t * .5];
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
