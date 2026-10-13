@@ -41,7 +41,7 @@ floor.rotation.x = -Math.PI / 2; floor.position.y = -.025; floor.receiveShadow =
 const skin = new THREE.MeshStandardMaterial({ color: '#c7a88b', roughness: .82 });
 const anatomicalSkin = skin.clone(); anatomicalSkin.side = THREE.DoubleSide;
 const cloth = new THREE.MeshStandardMaterial({ color: '#ded9cf', roughness: .88, side: THREE.DoubleSide });
-const bodySuitMaterial = new THREE.MeshStandardMaterial({ color: '#c7a88b', roughness: .82, side: THREE.DoubleSide });
+const bodySuitMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: .84, side: THREE.DoubleSide });
 const fabricMats = new Map();
 const surfaces = new Map();
 function ellipsoid(name, pos, size, mat = skin) {
@@ -437,6 +437,13 @@ function createUnifiedBodysuit() {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
   geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+  // The body stays gold, except the shoulders and upper chest that show above the dress neckline: they take the skin tone.
+  const gold = new THREE.Color('#c99549'), skinTone = new THREE.Color('#c7a88b'), colors = new Float32Array(vertexCount * 3), tint = new THREE.Color();
+  for (let i = 0; i < vertexCount; i++) {
+    tint.copy(gold).lerp(skinTone, smoothstep(2.48, 2.60, positions[i * 3 + 1]));
+    colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b;
+  }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
   const suitSkeleton = new THREE.Skeleton(bones); scene.updateMatrixWorld(true); suitSkeleton.calculateInverses();
   const suit = new THREE.SkinnedMesh(geometry, bodySuitMaterial); suit.name = 'womanBodysuit'; suit.castShadow = true; suit.receiveShadow = true; suit.frustumCulled = false; scene.add(suit); scene.updateMatrixWorld(true); suit.bind(suitSkeleton);
@@ -451,7 +458,7 @@ function createFemaleDress() {
   const smoothstep = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
   // Outline knots, top to bottom: y, half-width, front depth, back depth.
   const knots = [
-    [2.72, .33, .20, .20], [2.63, .42, .235, .235], [2.55, .47, .26, .26],
+    [2.72, .27, .185, .185], [2.63, .42, .235, .235], [2.55, .47, .26, .26],
     [2.46, .485, .285, .285], [2.32, .46, .38, .295], [2.20, .445, .40, .30], [2.10, .43, .39, .30],
     [2.00, .395, .33, .29], [1.90, .37, .28, .28], [1.80, .365, .275, .275], [1.70, .45, .28, .28],
     [1.60, .535, .29, .365], [1.50, .575, .305, .42], [1.40, .59, .315, .44], [1.30, .575, .305, .44],
@@ -477,7 +484,7 @@ function createFemaleDress() {
       const sn = Math.sin(a), squarish = (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
       const x = row.rx * sn * squarish, z = (c >= 0 ? row.rzF : row.rzB) * c * squarish;
       // Wide round neckline: the front edge dips below the collarbone, the back stays higher.
-      y -= smoothstep(2.60, 2.72, row.y) * .11 * Math.max(c, 0) ** 3;
+      y -= smoothstep(2.60, 2.72, row.y) * .07 * Math.max(c, 0) ** 3;
       positions.push(x, y, z);
       let inf;
       if (y >= 1.68) {
