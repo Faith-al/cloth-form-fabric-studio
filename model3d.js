@@ -759,6 +759,8 @@ function frame() {
 frame();
 window.Cloth3D = {
   setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
+  // Outfits on the woman: 'dress' shows the dress and gele; 'shirtTrousers' shows only the base model for now.
+  setOutfit(name) { const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; },
   select(id) { surfaces.forEach((m, key) => { m.material.emissive.set(key === id ? '#514237' : '#000000'); m.material.emissiveIntensity = key === id ? .12 : 0; }); },
   setTexture(id, data) {
     const loader = new THREE.TextureLoader(); loader.load(data, texture => {

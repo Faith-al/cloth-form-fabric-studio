@@ -10,7 +10,7 @@
 <body data-model="woman"><header class="top"><div class="brand">Cloth <span>&</span> Form</div><nav class="gender-switch" aria-label="Choose mannequin"><a class="btn" href="index.html">Man</a><a class="btn active" href="woman.html">Woman</a></nav><div class="tag">Fabric reference studio</div></header>
 <main class="layout">
 <section class="card sidebar">
-<div class="outfit-switch" role="group" aria-label="Choose outfit"><button class="btn active" id="outfitDress" type="button" aria-pressed="true">Dress</button><button class="btn" id="outfitShirtTrousers" type="button" disabled title="Coming later">Shirt + Trousers</button></div>
+<div class="outfit-switch" role="group" aria-label="Choose outfit"><button class="btn active" id="outfitDress" type="button" aria-pressed="true">Dress</button><button class="btn" id="outfitShirtTrousers" type="button" aria-pressed="false">Shirt + Trousers</button></div><p class="hint" id="outfitNote" hidden style="margin:-10px 0 16px">Base model only for now. Shirt and trousers come later.</p>
 <div class="step"><div class="num">1</div><div><h3>Add your fabric</h3><p>Upload a photo. A flatter photo makes the print easier to place.</p></div></div>
 <div class="upload"><label for="file">Choose a fabric photo</label><input id="file" type="file" accept="image/*"><div>JPG, PNG or WEBP · or paste an image with Ctrl+V</div></div>
 <div class="fabric-wrap"><div class="placeholder" id="fabricPlaceholder">Your fabric preview will appear here</div><canvas id="fabricCanvas" hidden></canvas></div>
@@ -274,6 +274,6 @@ const drawFabricPreview=drawFullPreview;
 drawFullPreview=function(crop=null){drawFabricPreview(crop);if(crop==null)queueMicrotask(setupWorkshopSource)};
 </script>
 <script>function showModelLoadError(error){const m=document.getElementById('model');if(!m)return;const panel=document.createElement('div');panel.className='load-error';panel.textContent=error?'The 3D preview could not start: '+(error.message||'model error'):'The 3D preview did not finish loading. Check your internet connection and refresh the page.';m.replaceChildren(panel)}const modelLoadTimer=setTimeout(showModelLoadError,15000);</script>
-<script>document.getElementById('outfitDress').onclick=()=>window.Cloth3D?.setDress(true);</script>
-<script type="module">import('./model3d.js?v=20261019g').then(()=>clearTimeout(modelLoadTimer)).catch(error=>showModelLoadError(error));</script>
+<script>function chooseOutfit(name){const dress=name==='dress';for(const [id,on] of [['outfitDress',dress],['outfitShirtTrousers',!dress]]){const b=document.getElementById(id);b.classList.toggle('active',on);b.setAttribute('aria-pressed',on)}document.getElementById('outfitNote').hidden=dress;for(const id of ['garmentList','panelList']){const el=document.getElementById(id);if(el)el.style.display=dress?'':'none'}window.Cloth3D?.setOutfit(name)}document.getElementById('outfitDress').onclick=()=>chooseOutfit('dress');document.getElementById('outfitShirtTrousers').onclick=()=>chooseOutfit('shirtTrousers');</script>
+<script type="module">import('./model3d.js?v=20261019h').then(()=>clearTimeout(modelLoadTimer)).catch(error=>showModelLoadError(error));</script>
 </body></html>
