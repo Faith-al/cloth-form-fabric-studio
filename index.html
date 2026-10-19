@@ -273,5 +273,5 @@ const drawFabricPreview=drawFullPreview;
 drawFullPreview=function(crop=null){drawFabricPreview(crop);if(crop==null)queueMicrotask(setupWorkshopSource)};
 </script>
 <script>function showModelLoadError(error){const m=document.getElementById('model');if(!m)return;const panel=document.createElement('div');panel.className='load-error';panel.textContent=error?'The 3D preview could not start: '+(error.message||'model error'):'The 3D preview did not finish loading. Check your internet connection and refresh the page.';m.replaceChildren(panel)}const modelLoadTimer=setTimeout(showModelLoadError,15000);</script>
-<script type="module">import('./model3d.js?v=20261019e').then(()=>clearTimeout(modelLoadTimer)).catch(error=>showModelLoadError(error));</script>
+<script type="module">import('./model3d.js?v=20261019f').then(()=>clearTimeout(modelLoadTimer)).catch(error=>showModelLoadError(error));</script>
 </body></html>
