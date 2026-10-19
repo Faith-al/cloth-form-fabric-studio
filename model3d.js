@@ -836,7 +836,8 @@ function createShirtTrousers() {
       panel(`woman${Name}${half}`, skirtRows.map(([y, rx, rzF, rzB]) => Array.from({ length: cols }, (_, s) => {
         const a = a0 + (a1 - a0) * s / (cols - 1), sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
         // Pleats: rounded folds all round the skirt, flat in the waistband and deepening toward the hem.
-        const fold = pleated ? 1 + smoothstep(1.76, 1.30, y) * (.03 + .04 * smoothstep(1.3, .64, y)) * Math.cos(22 * a) : 1;
+        const gather = smoothstep(1.76, 1.68, y) * (1 - smoothstep(1.62, 1.35, y)), deep = smoothstep(1.66, 1.25, y);
+        const fold = pleated ? 1 + gather * .035 * Math.cos(44 * a) + deep * (.04 + .07 * smoothstep(1.3, .64, y)) * Math.cos(20 * a) : 1;
         return [rx * sn * q * fold, y, (c >= 0 ? rzF : rzB) * c * q * fold];
       })), skirtWeights).userData.piece = `trousers:${variant}`;
     }
