@@ -735,10 +735,10 @@ function createShirtTrousers() {
   for (const side of ['left', 'right']) {
     const Side = side[0].toUpperCase() + side.slice(1);
     // Short fitted sleeve to halfway down the upper arm.
-    sleevePanel(`womanTop${Side}ShortSleeve`, side, [[.22, 2.62], [.40, 2.54], [.50, 2.36], [.555, 2.23]], [.105, .16, .155, .148], () => 0, 'shirt:short');
+    sleevePanel(`womanTop${Side}ShortSleeve`, side, [[.22, 2.62], [.40, 2.54], [.50, 2.36], [.555, 2.23]], [.11, .168, .163, .151], () => 0, 'shirt:short');
     // Long fitted sleeve to the wrist.
     sleevePanel(`womanTop${Side}LongSleeve`, side, [[.22, 2.62], [.40, 2.54], [.53, 2.30], [.66, 2.02], [.76, 1.70], [.83, 1.46], [.845, 1.37]],
-      [.105, .16, .155, .138, .122, .112, .108], forearm, 'shirt:long');
+      [.11, .168, .163, .141, .122, .112, .108], forearm, 'shirt:long');
   }
   // Open cropped jacket worn over the top, like a kimono jacket: no collar, fronts hanging straight down with
   // a gap in the middle, ending at the waist, with wide elbow-length sleeves. Left front, right front, back
