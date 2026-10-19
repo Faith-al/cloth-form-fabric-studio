@@ -137,6 +137,17 @@ const shirtRows = feminine ? [
 if (!feminine) {
   makeSurface('shirtFront', shirtRows, -Math.PI / 2, Math.PI / 2);
   makeSurface('shirtBack', shirtRows, Math.PI / 2, Math.PI * 1.5);
+  // Open jacket worn over the shirt: it follows the shirt closely over the shoulders (so it rests on the body),
+  // has no collar and hangs open at the front, down to the hips.
+  const jacketRows = [
+    { y: 1.24, cx: 0, rx: .47, rz: .30 }, { y: 1.36, cx: 0, rx: .475, rz: .305 }, { y: 1.48, cx: 0, rx: .52, rz: .32 },
+    { y: 1.82, cx: 0, rx: .50, rz: .315 }, { y: 2.27, cx: 0, rx: .565, rz: .315 }, { y: 2.50, cx: 0, rx: .54, rz: .295 },
+    { y: 2.59, cx: 0, rx: .51, rz: .275 }, { y: 2.65, cx: 0, rx: .48, rz: .265 }, { y: 2.70, cx: 0, rx: .43, rz: .248 },
+    { y: 2.75, cx: 0, rx: .35, rz: .218 }, { y: 2.78, cx: 0, rx: .28, rz: .195 }
+  ];
+  makeSurface('manJacketLeftFront', jacketRows, -Math.PI / 2, -.32);
+  makeSurface('manJacketRightFront', jacketRows, .32, Math.PI / 2);
+  makeSurface('manJacketBack', jacketRows, Math.PI / 2, Math.PI * 1.5);
 }
 // Sleeves have their own wrapped textile surfaces and remain independently selectable.
 function makeSleeve(id, sign) {
@@ -154,6 +165,16 @@ function makeSleeve(id, sign) {
     scene.add(sleeve); surfaces.set(id, sleeve);
     const arm = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, .105, 16, false), skin);
     arm.name = `${id}Arm`; arm.castShadow = true; scene.add(arm);
+    // Extra sleeves for the outfit choices: short shirt sleeve, wide and regular jacket sleeves, kaftan sleeve.
+    const extra = (name, pts, segments, radii) => {
+      const c = new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(sign * x, y, 0)));
+      const mesh = new THREE.Mesh(taperedTube(c, segments, 24, radii, 0), cloth.clone());
+      mesh.name = name; mesh.userData.panel = name; mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh); surfaces.set(name, mesh);
+    };
+    extra(`${id}Short`, [[.28, 2.57], [.47, 2.53], [.57, 2.36], [.61, 2.26]], 20, [.17, .17, .165, .165]);
+    extra(`${id}JacketWide`, [[.27, 2.59], [.47, 2.55], [.60, 2.32], [.68, 2.05], [.74, 1.84]], 32, [.18, .19, .225, .27, .31]);
+    extra(`${id}JacketNarrow`, [[.27, 2.59], [.47, 2.55], [.60, 2.31], [.69, 2.02], [.80, 1.66], [.845, 1.40]], 48, [.18, .195, .19, .18, .17, .165]);
+    extra(`${id}Kaftan`, [[.27, 2.59], [.47, 2.55], [.60, 2.31], [.69, 2.02], [.80, 1.66], [.85, 1.40]], 48, [.18, .2, .22, .245, .27, .285]);
   }
   if (feminine) {
     const shoulder = ellipsoid(`${id}ShoulderCap`, [sign * .40, 2.48, 0], [.18, .20, .17]);
@@ -176,16 +197,32 @@ for (const [id, cx] of [['left', -.235], ['right', .235]]) {
     { y: 1.48, cx, rx: .245, rz: .22 }
   ];
   // Extra cloth rows around the knee let the trouser bend smoothly with its leg.
-  const denseRows = [];
-  for (let r = 0; r < rows.length - 1; r++) for (let step = 0; step < 6; step++) {
-    const t = step / 6, a = rows[r], b = rows[r + 1], y = a.y + (b.y - a.y) * t;
-    const kneeEase = .026 * Math.exp(-(((y - .69) / .16) ** 2));
-    denseRows.push({ y, cx: a.cx + (b.cx - a.cx) * t, rx: a.rx + (b.rx - a.rx) * t + .012 + kneeEase, rz: a.rz + (b.rz - a.rz) * t + .012 + kneeEase });
-  }
-  denseRows.push({ ...rows.at(-1), rx: rows.at(-1).rx + .012, rz: rows.at(-1).rz + .012 });
+  const densify = rows => {
+    const denseRows = [];
+    for (let r = 0; r < rows.length - 1; r++) for (let step = 0; step < 6; step++) {
+      const t = step / 6, a = rows[r], b = rows[r + 1], y = a.y + (b.y - a.y) * t;
+      const kneeEase = .026 * Math.exp(-(((y - .69) / .16) ** 2));
+      denseRows.push({ y, cx: a.cx + (b.cx - a.cx) * t, rx: a.rx + (b.rx - a.rx) * t + .012 + kneeEase, rz: a.rz + (b.rz - a.rz) * t + .012 + kneeEase });
+    }
+    denseRows.push({ ...rows.at(-1), rx: rows.at(-1).rx + .012, rz: rows.at(-1).rz + .012 });
+    return denseRows;
+  };
   if (!feminine) {
+    const denseRows = densify(rows);
     makeSurface(`${id}LegFront`, denseRows, -Math.PI / 2, Math.PI / 2);
     makeSurface(`${id}LegBack`, denseRows, Math.PI / 2, Math.PI * 1.5);
+    // Wide legs flare out toward the floor (the hems step outward so the two legs never cross); slim legs taper.
+    const wide = densify([
+      { y: .10, cx: cx * 1.3, rx: .29, rz: .30 }, { y: .48, cx: cx * 1.13, rx: .25, rz: .26 },
+      { y: .86, cx, rx: .215, rz: .215 }, { y: 1.25, cx, rx: .24, rz: .22 }, { y: 1.48, cx, rx: .245, rz: .22 }
+    ]), slim = densify([
+      { y: .12, cx, rx: .135, rz: .15 }, { y: .48, cx, rx: .15, rz: .16 },
+      { y: .86, cx, rx: .19, rz: .195 }, { y: 1.25, cx, rx: .238, rz: .22 }, { y: 1.48, cx, rx: .245, rz: .22 }
+    ]);
+    for (const [suffix, dense] of [['Wide', wide], ['Slim', slim]]) {
+      makeSurface(`${id}LegFront${suffix}`, dense, -Math.PI / 2, Math.PI / 2);
+      makeSurface(`${id}LegBack${suffix}`, dense, Math.PI / 2, Math.PI * 1.5);
+    }
   }
   if (!feminine) capsuleBetween(`${id}leg`, [cx, .08, 0], [cx, .58, 0], .12);
   ellipsoid(`${id}foot`, [cx, .09, .14], feminine ? [.16, .095, .29] : [.14, .085, .27]);
@@ -206,10 +243,10 @@ function makeJoint(name, position, objectNames) {
 const joints = {
   torso: makeJoint('torsoPivot', [0, 1.36, 0], []),
   head: makeJoint('headJoint', [0, 2.99, 0], ['head']),
-  leftArm: makeJoint('leftShoulder', [-.36, 2.57, 0], ['leftSleeve', 'leftSleeveArm', 'leftSleeveHand', 'leftSleeveShoulderCap']),
-  rightArm: makeJoint('rightShoulder', [.36, 2.57, 0], ['rightSleeve', 'rightSleeveArm', 'rightSleeveHand', 'rightSleeveShoulderCap']),
-  leftLeg: makeJoint('leftHip', [feminine ? -.27 : -.235, feminine ? 1.60 : 1.45, 0], [feminine ? 'leftlegSkin' : 'leftLegFront', ...(feminine ? [] : ['leftLegBack']), 'leftleg', 'leftfoot']),
-  rightLeg: makeJoint('rightHip', [feminine ? .27 : .235, feminine ? 1.60 : 1.45, 0], [feminine ? 'rightlegSkin' : 'rightLegFront', ...(feminine ? [] : ['rightLegBack']), 'rightleg', 'rightfoot']),
+  leftArm: makeJoint('leftShoulder', [-.36, 2.57, 0], ['leftSleeve', 'leftSleeveArm', 'leftSleeveHand', 'leftSleeveShoulderCap', 'leftSleeveShort', 'leftSleeveJacketWide', 'leftSleeveJacketNarrow', 'leftSleeveKaftan']),
+  rightArm: makeJoint('rightShoulder', [.36, 2.57, 0], ['rightSleeve', 'rightSleeveArm', 'rightSleeveHand', 'rightSleeveShoulderCap', 'rightSleeveShort', 'rightSleeveJacketWide', 'rightSleeveJacketNarrow', 'rightSleeveKaftan']),
+  leftLeg: makeJoint('leftHip', [feminine ? -.27 : -.235, feminine ? 1.60 : 1.45, 0], [feminine ? 'leftlegSkin' : 'leftLegFront', ...(feminine ? [] : ['leftLegBack', 'leftLegFrontWide', 'leftLegBackWide', 'leftLegFrontSlim', 'leftLegBackSlim']), 'leftleg', 'leftfoot']),
+  rightLeg: makeJoint('rightHip', [feminine ? .27 : .235, feminine ? 1.60 : 1.45, 0], [feminine ? 'rightlegSkin' : 'rightLegFront', ...(feminine ? [] : ['rightLegBack', 'rightLegFrontWide', 'rightLegBackWide', 'rightLegFrontSlim', 'rightLegBackSlim']), 'rightleg', 'rightfoot']),
   neck: makeJoint('neckJoint', [0, 2.61, 0], ['neck'])
 };
 joints.neck.attach(joints.head);function bone(parent, name, position) { const b = new THREE.Bone(); b.name = name; b.position.set(...position); parent.add(b); return b; }
@@ -249,9 +286,9 @@ const spineRig = (() => {
     const mesh = new THREE.SkinnedMesh(geometry, source.material); mesh.name = name; mesh.castShadow = true; mesh.receiveShadow = true;
     source.parent.remove(source); joints.torso.add(mesh); joints.torso.updateMatrixWorld(true); mesh.bind(skeleton); source.geometry.dispose(); return mesh;
   }
-  for (const name of feminine ? [] : ['body', 'shirtFront', 'shirtBack', 'seam']) {
+  for (const name of feminine ? [] : ['body', 'shirtFront', 'shirtBack', 'seam', 'manJacketLeftFront', 'manJacketRightFront', 'manJacketBack']) {
     const mesh = skinTorso(name);
-    if (mesh && (name === 'shirtFront' || name === 'shirtBack')) surfaces.set(name, mesh);
+    if (mesh && name !== 'body' && name !== 'seam') surfaces.set(name, mesh);
   }
   return { root, mid, chest, skeleton };
 })();
@@ -274,6 +311,7 @@ for (const [side, sign, group] of [['left', -1, joints.leftArm], ['right', 1, jo
   } else {
     const sleeve = skinnedCopy(scene.getObjectByName(`${side}Sleeve`), group, skeleton, 1, -.55);
     surfaces.set(`${side}Sleeve`, sleeve);
+    for (const extra of ['Short', 'JacketWide', 'JacketNarrow', 'Kaftan']) surfaces.set(`${side}Sleeve${extra}`, skinnedCopy(scene.getObjectByName(`${side}Sleeve${extra}`), group, skeleton, 1, -.55));
     skinnedCopy(scene.getObjectByName(`${side}SleeveArm`), group, skeleton, 1, -.55);
   }
   const hand = scene.getObjectByName(`${side}SleeveHand`); if (hand) wrist.attach(hand);
@@ -294,7 +332,7 @@ for (const [side, group] of [['left', joints.leftLeg], ['right', joints.rightLeg
     const kneecap = ellipsoid(`${side}Kneecap`, [cx, .76, .12], [.145, .145, .12]);
     knee.attach(kneecap);
   } else {
-    for (const panel of ['LegFront', 'LegBack']) surfaces.set(`${side}${panel}`, skinnedCopy(scene.getObjectByName(`${side}${panel}`), group, skeleton, 1, -.86));
+    for (const panel of ['LegFront', 'LegBack', 'LegFrontWide', 'LegBackWide', 'LegFrontSlim', 'LegBackSlim']) surfaces.set(`${side}${panel}`, skinnedCopy(scene.getObjectByName(`${side}${panel}`), group, skeleton, 1, -.86));
     skinnedCopy(scene.getObjectByName(`${side}leg`), group, skeleton, 1, -.76);
   }
   const foot = scene.getObjectByName(`${side}foot`); if (foot) ankle.attach(foot);
@@ -647,12 +685,15 @@ if (feminine) createHeadtie();
 // trousers that fall to the floor. Plain and empty like the dress; every piece is its own fabric panel.
 let womanShirtTrousers = [], womanOutfit = 'shirtTrousers';
 const womanPieces = { jacket: 'wide', shirt: 'sleeveless', trousers: 'wide' };
+// The same lists drive the man's wardrobe (outfits 'shirtTrousers' and 'kaftan'); the trousers stay on under the kaftan.
 function showWomanPieces() {
-  const on = womanOutfit !== 'dress';
   for (const part of womanShirtTrousers) {
-    const [kind, variant] = (part.userData.piece || '').split(':');
-    const chosen = womanPieces[kind];
-    part.visible = on && (variant ? chosen === variant : kind !== 'jacket' || chosen !== 'none');
+    const [kind, variant] = (part.userData.piece || '').split(':'), chosen = womanPieces[kind];
+    let show;
+    if (kind === 'kaftan') show = womanOutfit === 'kaftan';
+    else if (womanOutfit === 'dress' || (womanOutfit === 'kaftan' && kind !== 'trousers')) show = false;
+    else show = variant ? chosen === variant : kind !== 'jacket' || chosen !== 'none';
+    part.visible = show;
   }
 }
 function createShirtTrousers() {
@@ -851,6 +892,72 @@ function createShirtTrousers() {
   }
 }
 if (feminine) createShirtTrousers();
+// The man's wardrobe: tag his garments so the outfit buttons can switch them, and add a long kaftan.
+function createManWardrobe() {
+  const tag = (names, piece) => names.forEach(name => { const mesh = surfaces.get(name) || scene.getObjectByName(name); if (mesh) { mesh.userData.piece = piece; womanShirtTrousers.push(mesh); } });
+  tag(['shirtFront', 'shirtBack', 'seam'], 'shirt');
+  if (collar) { collar.userData.piece = 'shirt'; womanShirtTrousers.push(collar); }
+  tag(['leftSleeve', 'rightSleeve'], 'shirt:long');
+  tag(['leftSleeveShort', 'rightSleeveShort'], 'shirt:short');
+  tag(['manJacketLeftFront', 'manJacketRightFront', 'manJacketBack'], 'jacket');
+  tag(['leftSleeveJacketWide', 'rightSleeveJacketWide'], 'jacket:wide');
+  tag(['leftSleeveJacketNarrow', 'rightSleeveJacketNarrow'], 'jacket:normal');
+  tag(['leftLegFront', 'leftLegBack', 'rightLegFront', 'rightLegBack'], 'trousers:straight');
+  tag(['leftLegFrontWide', 'leftLegBackWide', 'rightLegFrontWide', 'rightLegBackWide'], 'trousers:wide');
+  tag(['leftLegFrontSlim', 'leftLegBackSlim', 'rightLegFrontSlim', 'rightLegBackSlim'], 'trousers:slim');
+  tag(['leftSleeveKaftan', 'rightSleeveKaftan'], 'kaftan');
+  // Kaftan: a long straight tunic from the neck to just above the ankles, worn over the trousers.
+  const lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
+  const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const knots = [[2.80, .20, .17, .17], [2.75, .30, .21, .21], [2.70, .43, .25, .25], [2.62, .505, .28, .28], [2.50, .55, .30, .30],
+    [2.27, .57, .32, .32], [2.00, .545, .32, .32], [1.75, .52, .32, .32], [1.48, .525, .325, .33], [1.25, .535, .33, .34],
+    [1.00, .55, .335, .345], [.70, .565, .345, .355], [.45, .58, .355, .365], [.22, .595, .365, .375]];
+  const rows = [];
+  for (let r = 0; r < 100; r++) {
+    const t = r / 99 * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(t)), f = t - i;
+    rows.push(knots[i].map((v, k) => lerp(v, knots[i + 1][k], f)));
+  }
+  const bones = [spineRig.root, spineRig.mid, spineRig.chest, legRigs.left.root, legRigs.left.knee, legRigs.left.ankle, legRigs.right.root, legRigs.right.knee, legRigs.right.ankle];
+  const skeleton = new THREE.Skeleton(bones); scene.updateMatrixWorld(true); skeleton.calculateInverses();
+  const minY = rows.at(-1)[0], height = rows[0][0] - minY;
+  for (const [half, a0, a1] of [['Front', -Math.PI / 2, Math.PI / 2], ['Back', Math.PI / 2, Math.PI * 1.5]]) {
+    const positions = [], uvs = [], indices = [], skinIndices = [], skinWeights = [], cols = 33;
+    rows.forEach(([y, rx, rzF, rzB], j) => {
+      const ring = [];
+      for (let s = 0; s < cols; s++) {
+        const a = a0 + (a1 - a0) * s / (cols - 1), sn = Math.sin(a), c = Math.cos(a), q = (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
+        const x = rx * sn * q, z = (c >= 0 ? rzF : rzB) * c * q; positions.push(x, y, z); ring.push([x, z]);
+        let inf;
+        if (y >= 1.55) { const localY = y - 1.36; inf = localY < .48 ? [[0, 1 - localY / .48], [1, localY / .48]] : localY < 1.03 ? [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]] : [[2, 1]]; }
+        else {
+          // Below the waist the kaftan follows both legs equally, leaning a little toward the nearer leg at the hip.
+          const torsoShare = smoothstep(1.25, 1.55, y), legShare = 1 - torsoShare;
+          const bias = smoothstep(.85, 1.3, y), left = .5 + (clamp(.5 - x / .5, 0, 1) - .5) * .75 * bias, right = 1 - left;
+          const hipW = smoothstep(.55, .85, y), localY = clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
+          inf = [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)], [3, legShare * hipW * left], [6, legShare * hipW * right], [4, legShare * (1 - hipW) * left], [7, legShare * (1 - hipW) * right]];
+        }
+        inf = inf.filter(([, w]) => w > .001).sort((p, q2) => q2[1] - p[1]).slice(0, 4);
+        const total = inf.reduce((sum, [, w]) => sum + w, 0) || 1;
+        for (let n = 0; n < 4; n++) { skinIndices.push(inf[n] ? inf[n][0] : 0); skinWeights.push(inf[n] ? inf[n][1] / total : 0); }
+        if (j < rows.length - 1 && s < cols - 1) { const n = j * cols + s, below = n + cols; indices.push(n, below, n + 1, n + 1, below, below + 1); }
+      }
+      const lengths = [0]; for (let s = 1; s < cols; s++) lengths.push(lengths[s - 1] + Math.hypot(ring[s][0] - ring[s - 1][0], ring[s][1] - ring[s - 1][1]));
+      for (let s = 0; s < cols; s++) uvs.push(lengths[s] / lengths[cols - 1], 1 - (y - minY) / height);
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+    geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    const name = `manKaftan${half}`, mesh = new THREE.SkinnedMesh(geometry, cloth.clone());
+    mesh.name = name; mesh.userData.panel = name; mesh.userData.piece = 'kaftan'; mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
+    scene.add(mesh); scene.updateMatrixWorld(true); mesh.bind(skeleton); surfaces.set(name, mesh); womanShirtTrousers.push(mesh);
+  }
+  Object.assign(womanPieces, { jacket: 'none', shirt: 'long', trousers: 'straight' });
+  showWomanPieces();
+}
+if (!feminine) createManWardrobe();
 
 // Make the whole woman 8% narrower (shoulders to feet, clothes included), keeping the head, neck and gele as
 // they are. Done once at rest: joints and bones move inward, every body and garment surface is narrowed in
