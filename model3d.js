@@ -573,6 +573,16 @@ function createHeadtie() {
     const i = clamp(Math.floor(t), 0, rings.length - 2), f = t - i, a = rings[i], b = rings[i + 1];
     return [0, 1, 2, 3, 4].map(k => lerp(a[k], b[k], f));
   };
+  // Where a pleat ring passes at a point along it (c from one end, 0, to the other, 1). Both ends of every pleat
+  // run back down behind the ears and meet at the back of the head, by the nape.
+  const ringPoint = (R, z, lift, sweep, c) => {
+    const psi = -sweep + 2 * sweep * c, e = THREE.MathUtils.smoothstep(Math.abs(psi) / sweep, .4, 1), tuck = e * e;
+    let x = lerp(R * Math.sin(psi), Math.sign(psi) * .03, tuck), y = lerp(cy + lift + R * tall * Math.cos(psi), 2.99, tuck), zz = lerp(z, -.22, e);
+    // Keep the cloth just outside the head while it travels round to the back.
+    const k = Math.hypot(x / .275, (y - 3.23) / .345, zz / .265);
+    if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; zz /= k; }
+    return [x, y, zz];
+  };
   let stripV = 0;
   for (let p = 0; p < rings.length - 1; p++) {
     const width = Math.hypot(rings[p + 1][0] - rings[p][0], rings[p + 1][1] - rings[p][1]);
@@ -581,35 +591,24 @@ function createHeadtie() {
       const s = -.12 + 1.24 * t, [R0, z0, lift, sweepDeg, ridge] = ringAt(p + s);
       const dR = rings[p + 1][0] - rings[p][0], dz = rings[p + 1][1] - rings[p][1], l = Math.hypot(dR, dz) || 1;
       const bulge = ridge * Math.sin(Math.PI * s), R = R0 + bulge * -dz / l, z = z0 + bulge * dR / l;
-      const sweep = THREE.MathUtils.degToRad(sweepDeg), psi = -sweep + 2 * sweep * c;
-      const fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
-      // Both ends of every pleat run back down behind the ears and meet at the back of the head, by the nape.
-      const e = THREE.MathUtils.smoothstep(Math.abs(psi) / sweep, .4, 1), tuck = e * e;
-      let x = lerp(R * Math.sin(psi), Math.sign(psi) * .03, tuck), y = lerp(cy + lift + R * tall * Math.cos(psi), 2.99, tuck), zz = lerp(z, -.22, e);
-      // Keep the cloth just outside the head while it travels round to the back.
-      const k = Math.hypot(x / .275, (y - 3.23) / .345, zz / .265);
-      if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; zz /= k; }
-      return [x, y, zz, R * 1.05 * (psi + sweep), stripV + fold * width];
+      const sweep = THREE.MathUtils.degToRad(sweepDeg), fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
+      return [...ringPoint(R, z, lift, sweep, c), R * 1.05 * 2 * sweep * c, stripV + fold * width];
     });
     stripV += width;
   }
-  // Small bunched cloth cap at the back of the head, sewn to the fan: its rim runs along the inside of the
-  // innermost fan pleat; it bulges back in a soft rounded shape, gathered low toward the nape where the pleat ends meet.
-  const capCentre = [0, 3.26, -.075], gather = [0, -.25, -.13];
-  grid(12, 80, (t, c) => {
-    const phi = t * Math.PI / 2, psi = c * Math.PI * 2;
-    const crumple = 1 + .05 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .03 * Math.sin(9 * psi - 2 * phi);
-    let x = capCentre[0] + .29 * crumple * Math.sin(phi) * Math.sin(psi);
-    let y = capCentre[1] + (Math.cos(psi) > 0 ? .35 : .06) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
-    // At the sides the pleats run back toward the nape, so the cap's edge steps back with them and stays hidden.
-    let z = capCentre[2] - .11 * Math.sin(phi) * Math.sin(psi) ** 2 + gather[2] * crumple * Math.cos(phi) - .02 * Math.sin(phi) * (1 - Math.sin(phi));
+  // Small puffed cloth cap at the back of the head. Its edge is sewn along the inside of the first fan pleat
+  // all the way round, and it gathers to a point on top of the knot where the pleat ends meet.
+  const [capR, capZ, capLift, capSweep] = ringAt(5.35), capPole = [0, 3.012, -.218];
+  grid(14, 96, (t, c) => {
+    const rim = ringPoint(capR, capZ, capLift, THREE.MathUtils.degToRad(capSweep), c);
+    let [x, y, z] = [0, 1, 2].map(k => lerp(capPole[k], rim[k], t));
     const k = Math.hypot(x / .275, (y - 3.23) / .345, z / .265);
     if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; z /= k; }
-    // Puff the cap out from the head, fullest in the middle, as if hair is gathered underneath.
-    const puff = .06 * Math.sin(Math.PI * Math.min(1, t * 1.1)) ** .8 * Math.max(0, Math.cos(psi)) ** .5 * Math.min(1, t * 2);
-    const dx = x, dy = y - 3.23, dz = z, dl = Math.hypot(dx, dy, dz) || 1;
-    x += puff * dx / dl; y += puff * dy / dl; z += puff * dz / dl;
-    return [x, y, z, psi * .35 + 3, stripV + .2 + t * .5];
+    // Puff it out from the head, fullest in the middle and toward the top, as if hair is gathered underneath.
+    const crumple = 1 + .25 * Math.sin(11 * c * Math.PI + 3 * t) * Math.sin(Math.PI * t);
+    const puff = .07 * Math.sin(Math.PI * t) ** .9 * (.35 + .65 * Math.sin(Math.PI * c)) * crumple;
+    const dy = y - 3.23, dl = Math.hypot(x, dy, z) || 1;
+    return [x + puff * x / dl, y + puff * dy / dl, z + puff * z / dl, c * 2.4 + 3, stripV + .2 + t * .5];
   });
   // The pleat ends are gathered into a small flat rectangular knot at the nape, below the cap. It sits right
   // where the pleats meet, so the pleat ends run into it.
