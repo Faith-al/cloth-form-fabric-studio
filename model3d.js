@@ -596,9 +596,9 @@ function createHeadtie() {
     });
     stripV += width;
   }
-  // Small puffed cloth cap at the back of the head. Its edge is sewn along the inside of the first fan pleat
-  // all the way round, and it gathers to a point on top of the knot where the pleat ends meet.
-  const [capR, capZ, capLift, capSweep] = ringAt(5.35), capPole = [0, 3.012, -.218];
+  // Small puffed cloth cap at the back of the head. Its edge sits on the head, where the last flat pleat ends,
+  // runs round behind the fan, and gathers to a point on top of the knot where the pleat ends meet.
+  const [capR, capZ, capLift, capSweep] = ringAt(4.85), capPole = [0, 3.012, -.218];
   grid(14, 96, (t, c) => {
     const rim = ringPoint(capR, capZ, capLift, THREE.MathUtils.degToRad(capSweep), c);
     let [x, y, z] = [0, 1, 2].map(k => lerp(capPole[k], rim[k], t));
