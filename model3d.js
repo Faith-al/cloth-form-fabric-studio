@@ -718,8 +718,8 @@ function createShirtTrousers() {
   jacketPanel('womanJacketRightFront', rx => gap(rx), () => Math.PI / 2);
   jacketPanel('womanJacketBack', () => Math.PI / 2, () => Math.PI * 1.5);
   for (const [side, sign] of [['left', -1], ['right', 1]]) {
-    const curve = new THREE.CatmullRomCurve3([[.22, 2.59, 0], [.40, 2.53, 0], [.53, 2.32, 0], [.63, 2.08, 0], [.71, 1.82, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
-    const geo = taperedTube(curve, 28, 28, [.11, .165, .21, .255, .30], 0);
+    const curve = new THREE.CatmullRomCurve3([[.22, 2.60, 0], [.40, 2.545, 0], [.53, 2.325, 0], [.63, 2.08, 0], [.71, 1.82, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
+    const geo = taperedTube(curve, 28, 28, [.125, .185, .22, .26, .30], 0);
     const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
     for (let v = 0; v < pos.count; v++) {
       // bones: 0 chest, 1 shoulder, 2 elbow
