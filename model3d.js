@@ -19,7 +19,9 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.65, 0);
 controls.enableDamping = true;
 controls.dampingFactor = .08;
-controls.enablePan = false;
+// Move the view: right-drag, or Shift/Ctrl + drag, or two fingers on a touch screen.
+controls.enablePan = true;
+controls.screenSpacePanning = true;
 controls.minDistance = 4.4;
 controls.maxDistance = 10;
 controls.maxPolarAngle = Math.PI * .87;
@@ -719,7 +721,14 @@ renderer.domElement.addEventListener('pointerup', e => {
 });
 function resize() { const r = stage.getBoundingClientRect(); camera.aspect = r.width / r.height; camera.updateProjectionMatrix(); renderer.setSize(r.width, r.height, false); }
 new ResizeObserver(resize).observe(stage); resize();
-function frame() { requestAnimationFrame(frame); controls.update(); renderer.render(scene, camera); }
+const panLimit = { min: new THREE.Vector3(-2.5, -.5, -2.5), max: new THREE.Vector3(2.5, 4.5, 2.5) };
+function frame() {
+  requestAnimationFrame(frame);
+  // Keep the moved view near the figure so it cannot be panned away and lost.
+  const before = controls.target.clone(); controls.target.clamp(panLimit.min, panLimit.max);
+  camera.position.add(controls.target.clone().sub(before));
+  controls.update(); renderer.render(scene, camera);
+}
 frame();
 window.Cloth3D = {
   setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
