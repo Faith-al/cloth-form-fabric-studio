@@ -664,7 +664,7 @@ function createShirtTrousers() {
   const spine = y => { const localY = y - 1.36; return localY < .48 ? [[0, 1 - localY / .48], [1, localY / .48]] : localY < 1.03 ? [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]] : [[2, 1]]; };
   const squarish = (sn, c) => (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
   // Builds one skinned panel from rows of [x, y, z] points with matching weights.
-  const panel = (name, rows, weightsAt) => {
+  const panel = (name, rows, weightsAt, breakAfter = -1) => {
     const positions = [], uvs = [], indices = [], skinIndices = [], skinWeights = [], cols = rows[0].length;
     const ys = rows.map(r => r[0][1]), minY = Math.min(...ys), height = Math.max(...ys) - minY || 1;
     rows.forEach((row, j) => {
@@ -674,7 +674,7 @@ function createShirtTrousers() {
         let inf = weightsAt(x, y).filter(([, w]) => w > .001).sort((p, q) => q[1] - p[1]).slice(0, 4);
         const total = inf.reduce((sum, [, w]) => sum + w, 0) || 1;
         for (let n = 0; n < 4; n++) { skinIndices.push(inf[n] ? inf[n][0] : 0); skinWeights.push(inf[n] ? inf[n][1] / total : 0); }
-        if (j < rows.length - 1 && s < cols - 1) { const n = j * cols + s, below = n + cols; indices.push(n, below, n + 1, n + 1, below, below + 1); }
+        if (j < rows.length - 1 && s < cols - 1 && s !== breakAfter) { const n = j * cols + s, below = n + cols; indices.push(n, below, n + 1, n + 1, below, below + 1); }
       });
     });
     const geometry = new THREE.BufferGeometry();
@@ -704,21 +704,22 @@ function createShirtTrousers() {
   // of the hips; below it, it becomes its own wide leg that flares out to the floor.
   const trouserRows = sample([
     [1.90, 0, .39, .29, .29], [1.80, 0, .385, .285, .285], [1.70, 0, .46, .29, .29], [1.60, 0, .545, .30, .375],
-    [1.50, 0, .585, .315, .43], [1.40, 0, .60, .325, .45], [1.30, 0, .585, .315, .45], [1.20, .15, .43, .31, .43],
-    [1.10, .21, .355, .30, .37], [1.00, .25, .32, .29, .31], [.90, .27, .31, .275, .30], [.76, .28, .31, .28, .29],
+    [1.50, 0, .585, .315, .43], [1.40, .02, .58, .325, .45], [1.30, .07, .53, .32, .445], [1.20, .13, .46, .315, .42],
+    [1.10, .19, .39, .305, .38], [1.00, .23, .345, .295, .335], [.90, .26, .32, .285, .305], [.76, .28, .31, .28, .29],
     [.60, .29, .325, .29, .30], [.40, .30, .35, .32, .33], [.20, .31, .39, .35, .36], [.06, .32, .43, .38, .39]
   ], 110);
   for (const [name, sign, hip, knee, otherHip, otherKnee] of [['womanLeftTrouser', -1, 3, 4, 6, 7], ['womanRightTrouser', 1, 6, 7, 3, 4]]) {
     const arc = 30, wall = 5;
     const rows = trouserRows.map(([y, cx, rx, rzF, rzB]) => {
       // The inner side of each leg is a flat seam just off the centre line, so the two legs never cross.
-      const inner = y < 1.31 ? .005 : 0, start = Math.asin(clamp((inner - cx) / rx, -1, 1)), end = Math.PI - start, ring = [];
+      const inner = y < 1.31 ? .0015 : 0, start = Math.asin(clamp((inner - cx) / rx, -1, 1)), end = Math.PI - start, ring = [];
       for (let s = 0; s <= arc; s++) {
         const a = lerp(start, end, s / arc), sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
         ring.push([sign * Math.max(inner, cx + rx * sn * q), y, (c >= 0 ? rzF : rzB) * c * q]);
       }
       const back = ring[arc], front = ring[0];
-      for (let s = 1; s <= wall; s++) ring.push([lerp(back[0], front[0], s / wall), y, lerp(back[2], front[2], s / wall)]);
+      // The hidden inner wall is a separate strip (not joined to the outer cloth), so it cannot darken the seam.
+      for (let s = 0; s <= wall; s++) ring.push([lerp(back[0], front[0], s / wall), y, lerp(back[2], front[2], s / wall)]);
       return ring;
     });
     panel(name, rows, (x, y) => {
@@ -729,7 +730,7 @@ function createShirtTrousers() {
       const hipW = smoothstep(.62, .90, y), localY = clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
       return [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
         [hip, legShare * hipW * own], [knee, legShare * (1 - hipW) * own], [otherHip, legShare * hipW * (1 - own)], [otherKnee, legShare * (1 - hipW) * (1 - own)]];
-    });
+    }, arc);
   }
 }
 if (feminine) createShirtTrousers();
