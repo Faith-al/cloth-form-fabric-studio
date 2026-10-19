@@ -591,14 +591,14 @@ function createHeadtie() {
     });
     stripV += width;
   }
-  // Small bunched cloth cap at the back of the head, tucked just behind the fan. Its rim lies against the
-  // fan; it bulges back in a soft rounded shape, gathered low toward the nape where the pleat ends meet.
-  const capCentre = [0, 3.25, -.14], gather = [0, -.24, -.15];
+  // Small bunched cloth cap at the back of the head, sewn to the fan: its rim runs along the inside of the
+  // innermost fan pleat; it bulges back in a soft rounded shape, gathered low toward the nape where the pleat ends meet.
+  const capCentre = [0, 3.26, -.075], gather = [0, -.25, -.23];
   grid(12, 80, (t, c) => {
     const phi = t * Math.PI / 2, psi = c * Math.PI * 2;
     const crumple = 1 + .05 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .03 * Math.sin(9 * psi - 2 * phi);
-    let x = capCentre[0] + .24 * crumple * Math.sin(phi) * Math.sin(psi);
-    let y = capCentre[1] + (Math.cos(psi) > 0 ? .32 : .2) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
+    let x = capCentre[0] + .32 * crumple * Math.sin(phi) * Math.sin(psi);
+    let y = capCentre[1] + (Math.cos(psi) > 0 ? .35 : .22) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
     let z = capCentre[2] + gather[2] * crumple * Math.cos(phi) - .02 * Math.sin(phi) * (1 - Math.sin(phi));
     const k = Math.hypot(x / .275, (y - 3.23) / .345, z / .265);
     if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; z /= k; }
