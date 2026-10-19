@@ -642,6 +642,97 @@ function createHeadtie() {
   scene.add(gele); scene.updateMatrixWorld(true); joints.head.attach(gele); surfaces.set('headtie', gele);
 }
 if (feminine) createHeadtie();
+
+// Second outfit for the woman: a sleeveless top with a high round neck, tucked into high-waisted wide-leg
+// trousers that fall to the floor. Plain and empty like the dress; every piece is its own fabric panel.
+let womanShirtTrousers = [];
+function createShirtTrousers() {
+  const material = new THREE.MeshStandardMaterial({ color: '#e7e4de', roughness: .92, side: THREE.DoubleSide });
+  const lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
+  const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+  const cr = (k, t, c) => { // Catmull-Rom through knot column c at fractional index t
+    const i = Math.min(k.length - 2, Math.floor(t)), f = t - i;
+    const p0 = k[Math.max(0, i - 1)][c], p1 = k[i][c], p2 = k[i + 1][c], p3 = k[Math.min(k.length - 1, i + 2)][c];
+    return .5 * ((2 * p1) + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f * f + (-p0 + 3 * p1 - 3 * p2 + p3) * f * f * f);
+  };
+  const sample = (knots, count) => Array.from({ length: count }, (_, r) => {
+    const t = r / (count - 1) * (knots.length - 1), i = Math.min(knots.length - 2, Math.floor(t)), f = t - i;
+    return [lerp(knots[i][0], knots[i + 1][0], f), ...knots[0].slice(1).map((_, c) => cr(knots, t, c + 1))];
+  });
+  const bones = [spineRig.root, spineRig.mid, spineRig.chest, legRigs.left.root, legRigs.left.knee, legRigs.left.ankle, legRigs.right.root, legRigs.right.knee, legRigs.right.ankle];
+  const skeleton = new THREE.Skeleton(bones); scene.updateMatrixWorld(true); skeleton.calculateInverses();
+  const spine = y => { const localY = y - 1.36; return localY < .48 ? [[0, 1 - localY / .48], [1, localY / .48]] : localY < 1.03 ? [[1, 1 - (localY - .48) / .55], [2, (localY - .48) / .55]] : [[2, 1]]; };
+  const squarish = (sn, c) => (Math.abs(sn) ** 2.5 + Math.abs(c) ** 2.5) ** (-1 / 2.5);
+  // Builds one skinned panel from rows of [x, y, z] points with matching weights.
+  const panel = (name, rows, weightsAt) => {
+    const positions = [], uvs = [], indices = [], skinIndices = [], skinWeights = [], cols = rows[0].length;
+    const ys = rows.map(r => r[0][1]), minY = Math.min(...ys), height = Math.max(...ys) - minY || 1;
+    rows.forEach((row, j) => {
+      const lengths = [0]; for (let s = 1; s < cols; s++) lengths.push(lengths[s - 1] + Math.hypot(row[s][0] - row[s - 1][0], row[s][2] - row[s - 1][2]));
+      row.forEach(([x, y, z], s) => {
+        positions.push(x, y, z); uvs.push(lengths[s] / (lengths[cols - 1] || 1), 1 - (ys[j] - minY) / height);
+        let inf = weightsAt(x, y).filter(([, w]) => w > .001).sort((p, q) => q[1] - p[1]).slice(0, 4);
+        const total = inf.reduce((sum, [, w]) => sum + w, 0) || 1;
+        for (let n = 0; n < 4; n++) { skinIndices.push(inf[n] ? inf[n][0] : 0); skinWeights.push(inf[n] ? inf[n][1] / total : 0); }
+        if (j < rows.length - 1 && s < cols - 1) { const n = j * cols + s, below = n + cols; indices.push(n, below, n + 1, n + 1, below, below + 1); }
+      });
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+    geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+    geometry.setIndex(indices); geometry.computeVertexNormals();
+    const mesh = new THREE.SkinnedMesh(geometry, material.clone()); mesh.name = name; mesh.userData.panel = name; mesh.userData.baseMaterial = material;
+    mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false; mesh.visible = false;
+    scene.add(mesh); scene.updateMatrixWorld(true); mesh.bind(skeleton); surfaces.set(name, mesh); womanShirtTrousers.push(mesh);
+    return mesh;
+  };
+  // Sleeveless top: y, half-width, front depth, back depth. It ends tucked inside the trouser waistband.
+  const topRows = sample([
+    [2.80, .15, .135, .135], [2.74, .22, .165, .165], [2.66, .33, .20, .20], [2.56, .44, .25, .25],
+    [2.46, .485, .285, .285], [2.32, .46, .38, .295], [2.20, .445, .40, .30], [2.10, .43, .39, .30],
+    [2.00, .395, .33, .29], [1.90, .37, .28, .28], [1.80, .365, .275, .275], [1.74, .37, .275, .275]
+  ], 70);
+  const topPanel = (name, a0, a1) => panel(name, topRows.map(([y, rx, rzF, rzB]) => Array.from({ length: 25 }, (_, s) => {
+    const a = a0 + (a1 - a0) * s / 24, sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
+    return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
+  })), (x, y) => spine(y));
+  topPanel('womanTopFront', -Math.PI / 2, Math.PI / 2);
+  topPanel('womanTopBack', Math.PI / 2, Math.PI * 1.5);
+  // Trousers: y, leg centre, half-width, front depth, back depth. Above the crotch each leg panel is one half
+  // of the hips; below it, it becomes its own wide leg that flares out to the floor.
+  const trouserRows = sample([
+    [1.90, 0, .39, .29, .29], [1.80, 0, .385, .285, .285], [1.70, 0, .46, .29, .29], [1.60, 0, .545, .30, .375],
+    [1.50, 0, .585, .315, .43], [1.40, 0, .60, .325, .45], [1.30, 0, .585, .315, .45], [1.20, .15, .43, .31, .43],
+    [1.10, .21, .355, .30, .37], [1.00, .25, .32, .29, .31], [.90, .27, .31, .275, .30], [.76, .28, .31, .28, .29],
+    [.60, .29, .325, .29, .30], [.40, .30, .35, .32, .33], [.20, .31, .39, .35, .36], [.06, .32, .43, .38, .39]
+  ], 110);
+  for (const [name, sign, hip, knee, otherHip, otherKnee] of [['womanLeftTrouser', -1, 3, 4, 6, 7], ['womanRightTrouser', 1, 6, 7, 3, 4]]) {
+    const arc = 30, wall = 5;
+    const rows = trouserRows.map(([y, cx, rx, rzF, rzB]) => {
+      // The inner side of each leg is a flat seam just off the centre line, so the two legs never cross.
+      const inner = y < 1.31 ? .005 : 0, start = Math.asin(clamp((inner - cx) / rx, -1, 1)), end = Math.PI - start, ring = [];
+      for (let s = 0; s <= arc; s++) {
+        const a = lerp(start, end, s / arc), sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
+        ring.push([sign * Math.max(inner, cx + rx * sn * q), y, (c >= 0 ? rzF : rzB) * c * q]);
+      }
+      const back = ring[arc], front = ring[0];
+      for (let s = 1; s <= wall; s++) ring.push([lerp(back[0], front[0], s / wall), y, lerp(back[2], front[2], s / wall)]);
+      return ring;
+    });
+    panel(name, rows, (x, y) => {
+      const torsoShare = smoothstep(1.38, 1.80, y), legShare = 1 - torsoShare;
+      // Around the hips the two halves share the pull evenly at the centre seam; below the crotch each
+      // leg follows only its own hip and knee.
+      const soft = lerp(.001, .2, smoothstep(1.12, 1.55, y)), own = lerp(.5, 1, clamp(Math.abs(x) / soft, 0, 1));
+      const hipW = smoothstep(.62, .90, y), localY = clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
+      return [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
+        [hip, legShare * hipW * own], [knee, legShare * (1 - hipW) * own], [otherHip, legShare * hipW * (1 - own)], [otherKnee, legShare * (1 - hipW) * (1 - own)]];
+    });
+  }
+}
+if (feminine) createShirtTrousers();
 const poseObjects = {
   torso: joints.torso, head: joints.head, neck: joints.neck,
   waist: spineRig.root, midSpine: spineRig.mid, chest: spineRig.chest,
@@ -759,8 +850,8 @@ function frame() {
 frame();
 window.Cloth3D = {
   setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
-  // Outfits on the woman: 'dress' shows the dress and gele; 'shirtTrousers' shows only the base model for now.
-  setOutfit(name) { const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; },
+  // Outfits on the woman: 'dress' shows the dress and gele; 'shirtTrousers' shows the sleeveless top and wide trousers.
+  setOutfit(name) { const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; womanShirtTrousers.forEach(part => { part.visible = !dress; }); },
   select(id) { surfaces.forEach((m, key) => { m.material.emissive.set(key === id ? '#514237' : '#000000'); m.material.emissiveIntensity = key === id ? .12 : 0; }); },
   setTexture(id, data) {
     const loader = new THREE.TextureLoader(); loader.load(data, texture => {
