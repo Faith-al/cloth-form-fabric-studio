@@ -585,7 +585,7 @@ function createHeadtie() {
       const fold = p % 2 ? 1 - clamp(s, 0, 1) : clamp(s, 0, 1);
       // Both ends of every pleat run back down behind the ears and meet at the back of the head, by the nape.
       const e = THREE.MathUtils.smoothstep(Math.abs(psi) / sweep, .4, 1), tuck = e * e;
-      let x = lerp(R * Math.sin(psi), Math.sign(psi) * .05, tuck), y = lerp(cy + lift + R * tall * Math.cos(psi), 2.99, tuck), zz = lerp(z, -.22, e);
+      let x = lerp(R * Math.sin(psi), Math.sign(psi) * .03, tuck), y = lerp(cy + lift + R * tall * Math.cos(psi), 2.99, tuck), zz = lerp(z, -.22, e);
       // Keep the cloth just outside the head while it travels round to the back.
       const k = Math.hypot(x / .275, (y - 3.23) / .345, zz / .265);
       if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; zz /= k; }
@@ -595,16 +595,31 @@ function createHeadtie() {
   }
   // Small bunched cloth cap at the back of the head, sewn to the fan: its rim runs along the inside of the
   // innermost fan pleat; it bulges back in a soft rounded shape, gathered low toward the nape where the pleat ends meet.
-  const capCentre = [0, 3.26, -.075], gather = [0, -.25, -.23];
+  const capCentre = [0, 3.26, -.075], gather = [0, -.25, -.13];
   grid(12, 80, (t, c) => {
     const phi = t * Math.PI / 2, psi = c * Math.PI * 2;
     const crumple = 1 + .05 * Math.sin(5 * psi + 4 * phi) * Math.sin(3 * phi + 1) + .03 * Math.sin(9 * psi - 2 * phi);
-    let x = capCentre[0] + .32 * crumple * Math.sin(phi) * Math.sin(psi);
-    let y = capCentre[1] + (Math.cos(psi) > 0 ? .35 : .22) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
-    let z = capCentre[2] + gather[2] * crumple * Math.cos(phi) - .02 * Math.sin(phi) * (1 - Math.sin(phi));
+    let x = capCentre[0] + .29 * crumple * Math.sin(phi) * Math.sin(psi);
+    let y = capCentre[1] + (Math.cos(psi) > 0 ? .35 : .06) * crumple * Math.sin(phi) * Math.cos(psi) + gather[1] * Math.cos(phi);
+    // At the sides the pleats run back toward the nape, so the cap's edge steps back with them and stays hidden.
+    let z = capCentre[2] - .11 * Math.sin(phi) * Math.sin(psi) ** 2 + gather[2] * crumple * Math.cos(phi) - .02 * Math.sin(phi) * (1 - Math.sin(phi));
     const k = Math.hypot(x / .275, (y - 3.23) / .345, z / .265);
     if (k < 1) { x /= k; y = 3.23 + (y - 3.23) / k; z /= k; }
+    // Puff the cap out from the head, fullest in the middle, as if hair is gathered underneath.
+    const puff = .06 * Math.sin(Math.PI * Math.min(1, t * 1.1)) ** .8 * Math.max(0, Math.cos(psi)) ** .5 * Math.min(1, t * 2);
+    const dx = x, dy = y - 3.23, dz = z, dl = Math.hypot(dx, dy, dz) || 1;
+    x += puff * dx / dl; y += puff * dy / dl; z += puff * dz / dl;
     return [x, y, z, psi * .35 + 3, stripV + .2 + t * .5];
+  });
+  // The pleat ends are gathered into a small flat rectangular knot at the nape, below the cap. It sits right
+  // where the pleats meet, so the pleat ends run into it.
+  const knot = [0, 2.99, -.214], size = [.058, .017, .009], sq = v => Math.sign(v) * Math.abs(v) ** .3;
+  grid(14, 40, (t, c) => {
+    // Rounded box: a sphere pushed out toward its corners, with a soft fold across the middle.
+    const ph = t * Math.PI, a = c * Math.PI * 2;
+    const nx = sq(Math.sin(ph) * Math.cos(a)), ny = sq(Math.cos(ph)), nz = sq(Math.sin(ph) * Math.sin(a));
+    const fold = 1 - .15 * Math.exp(-((nx / .2) ** 2));
+    return [knot[0] + size[0] * nx, knot[1] + size[1] * ny * fold, knot[2] - size[2] * nz * fold, c * .3 + 5, stripV + .9 + t * .1];
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
