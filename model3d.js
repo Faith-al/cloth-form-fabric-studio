@@ -645,7 +645,16 @@ if (feminine) createHeadtie();
 
 // Second outfit for the woman: a sleeveless top with a high round neck, tucked into high-waisted wide-leg
 // trousers that fall to the floor. Plain and empty like the dress; every piece is its own fabric panel.
-let womanShirtTrousers = [];
+let womanShirtTrousers = [], womanOutfit = 'shirtTrousers';
+const womanPieces = { jacket: 'wide', shirt: 'sleeveless', trousers: 'wide' };
+function showWomanPieces() {
+  const on = womanOutfit !== 'dress';
+  for (const part of womanShirtTrousers) {
+    const [kind, variant] = (part.userData.piece || '').split(':');
+    const chosen = womanPieces[kind];
+    part.visible = on && (variant ? chosen === variant : kind !== 'jacket' || chosen !== 'none');
+  }
+}
 function createShirtTrousers() {
   const material = new THREE.MeshStandardMaterial({ color: '#e7e4de', roughness: .92, side: THREE.DoubleSide });
   const lerp = THREE.MathUtils.lerp, clamp = THREE.MathUtils.clamp;
@@ -698,8 +707,39 @@ function createShirtTrousers() {
     const a = a0 + (a1 - a0) * s / 24, sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
     return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
   })), (x, y) => spine(y));
-  topPanel('womanTopFront', -Math.PI / 2, Math.PI / 2);
-  topPanel('womanTopBack', Math.PI / 2, Math.PI * 1.5);
+  topPanel('womanTopFront', -Math.PI / 2, Math.PI / 2).userData.piece = 'shirt';
+  topPanel('womanTopBack', Math.PI / 2, Math.PI * 1.5).userData.piece = 'shirt';
+  // Sleeves for every piece: a soft tube along the arm, skinned to chest, shoulder and elbow. `elbowShare(y)` says
+  // how much of the sleeve at each height follows the forearm.
+  const sleevePanel = (name, side, points, radii, elbowShare, piece) => {
+    const sign = side === 'left' ? -1 : 1, rig = armRigs[side];
+    const curve = new THREE.CatmullRomCurve3(points.map(([x, y]) => new THREE.Vector3(sign * x, y, 0)));
+    const geo = taperedTube(curve, 40, 28, radii, 0);
+    const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
+    for (let v = 0; v < pos.count; v++) {
+      // bones: 0 chest, 1 shoulder, 2 elbow
+      const y = pos.getY(v), k = v * 4, top = 1 - smoothstep(2.30, 2.55, y), toElbow = elbowShare(y);
+      const w = [[0, (1 - top) * .6], [1, Math.max(0, (top + (1 - top) * .4) * (1 - toElbow))], [2, toElbow]];
+      const total = w.reduce((sum, [, x]) => sum + x, 0) || 1;
+      w.forEach(([b, x], n) => { idx[k + n] = b; wts[k + n] = x / total; });
+    }
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4));
+    const sleeve = new THREE.SkinnedMesh(geo, material.clone()); sleeve.name = name; sleeve.userData.panel = name; sleeve.userData.baseMaterial = material; sleeve.userData.piece = piece;
+    sleeve.castShadow = true; sleeve.receiveShadow = true; sleeve.frustumCulled = false; sleeve.visible = false;
+    scene.add(sleeve); scene.updateMatrixWorld(true);
+    const sk = new THREE.Skeleton([spineRig.chest, rig.root, rig.elbow]); sk.calculateInverses(); sleeve.bind(sk);
+    surfaces.set(name, sleeve); womanShirtTrousers.push(sleeve);
+    return sleeve;
+  };
+  const forearm = y => smoothstep(2.15, 1.90, y);
+  for (const side of ['left', 'right']) {
+    const Side = side[0].toUpperCase() + side.slice(1);
+    // Short fitted sleeve to halfway down the upper arm.
+    sleevePanel(`womanTop${Side}ShortSleeve`, side, [[.22, 2.62], [.40, 2.54], [.50, 2.36], [.555, 2.23]], [.10, .152, .148, .145], () => 0, 'shirt:short');
+    // Long fitted sleeve to the wrist.
+    sleevePanel(`womanTop${Side}LongSleeve`, side, [[.22, 2.62], [.40, 2.54], [.53, 2.30], [.66, 2.02], [.76, 1.70], [.83, 1.46], [.845, 1.37]],
+      [.10, .152, .148, .135, .122, .112, .108], forearm, 'shirt:long');
+  }
   // Open cropped jacket worn over the top, like a kimono jacket: no collar, fronts hanging straight down with
   // a gap in the middle, ending at the waist, with wide elbow-length sleeves. Left front, right front, back
   // and both sleeves are separate fabric panels.
@@ -714,37 +754,38 @@ function createShirtTrousers() {
     return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
   })), (x, y) => spine(y));
   const gap = rx => Math.asin(clamp(edge / rx, 0, 1));
-  jacketPanel('womanJacketLeftFront', () => -Math.PI / 2, rx => -gap(rx));
-  jacketPanel('womanJacketRightFront', rx => gap(rx), () => Math.PI / 2);
-  jacketPanel('womanJacketBack', () => Math.PI / 2, () => Math.PI * 1.5);
-  for (const [side, sign] of [['left', -1], ['right', 1]]) {
-    const curve = new THREE.CatmullRomCurve3([[.22, 2.60, 0], [.40, 2.545, 0], [.53, 2.325, 0], [.63, 2.08, 0], [.71, 1.82, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
-    const geo = taperedTube(curve, 28, 28, [.112, .166, .197, .26, .30], 0);
-    const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
-    for (let v = 0; v < pos.count; v++) {
-      // bones: 0 chest, 1 shoulder, 2 elbow
-      const y = pos.getY(v), k = v * 4, top = 1 - smoothstep(2.30, 2.55, y), toElbow = .35 * smoothstep(2.05, 1.82, y);
-      const w = [[0, (1 - top) * .6], [1, Math.max(0, (top + (1 - top) * .4) * (1 - toElbow))], [2, toElbow]];
-      const total = w.reduce((sum, [, x]) => sum + x, 0) || 1;
-      w.forEach(([b, x], n) => { idx[k + n] = b; wts[k + n] = x / total; });
-    }
-    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4));
-    const name = side === 'left' ? 'womanJacketLeftSleeve' : 'womanJacketRightSleeve', rig = armRigs[side];
-    const sleeve = new THREE.SkinnedMesh(geo, material.clone()); sleeve.name = name; sleeve.userData.panel = name; sleeve.userData.baseMaterial = material;
-    sleeve.castShadow = true; sleeve.receiveShadow = true; sleeve.frustumCulled = false; sleeve.visible = false;
-    scene.add(sleeve); scene.updateMatrixWorld(true);
-    const sk = new THREE.Skeleton([spineRig.chest, rig.root, rig.elbow]); sk.calculateInverses(); sleeve.bind(sk);
-    surfaces.set(name, sleeve); womanShirtTrousers.push(sleeve);
+  jacketPanel('womanJacketLeftFront', () => -Math.PI / 2, rx => -gap(rx)).userData.piece = 'jacket';
+  jacketPanel('womanJacketRightFront', rx => gap(rx), () => Math.PI / 2).userData.piece = 'jacket';
+  jacketPanel('womanJacketBack', () => Math.PI / 2, () => Math.PI * 1.5).userData.piece = 'jacket';
+  for (const side of ['left', 'right']) {
+    const Side = side[0].toUpperCase() + side.slice(1);
+    // Wide jacket: flared elbow-length sleeves.
+    sleevePanel(`womanJacket${Side}Sleeve`, side, [[.22, 2.60], [.40, 2.545], [.53, 2.325], [.63, 2.08], [.71, 1.82]],
+      [.112, .166, .197, .26, .30], y => .35 * smoothstep(2.05, 1.82, y), 'jacket:wide');
+    // Regular jacket: long narrow sleeves to the wrist, roomy enough to go over a long-sleeved shirt.
+    sleevePanel(`womanJacket${Side}NarrowSleeve`, side, [[.22, 2.60], [.40, 2.545], [.53, 2.30], [.66, 2.02], [.76, 1.70], [.83, 1.46], [.85, 1.39]],
+      [.112, .172, .172, .158, .145, .135, .132], forearm, 'jacket:normal');
   }
   // Trousers: y, leg centre, half-width, front depth, back depth. Above the crotch each leg panel is one half
   // of the hips; below it, it becomes its own wide leg that flares out to the floor.
-  const trouserRows = sample([
+  const hipKnots = [
     [1.900, .000, .390, .290, .290], [1.800, .000, .385, .285, .285], [1.700, .000, .460, .290, .290], [1.600, .000, .545, .300, .375],
     [1.500, .000, .585, .315, .430], [1.400, .020, .580, .325, .450], [1.300, .070, .530, .320, .445], [1.200, .130, .460, .315, .420],
-    [1.100, .190, .390, .305, .380], [1.000, .230, .345, .295, .335], [.900, .260, .320, .285, .305], [.760, .280, .305, .276, .286],
-    [.600, .290, .306, .273, .283], [.400, .300, .305, .279, .288], [.200, .310, .318, .285, .293], [.060, .320, .344, .304, .312]
-  ], 110);
-  for (const [name, sign, hip, knee, otherHip, otherKnee] of [['womanLeftTrouser', -1, 3, 4, 6, 7], ['womanRightTrouser', 1, 6, 7, 3, 4]]) {
+  ];
+  const trouserVariants = {
+    // Wide legs that flare out to the floor.
+    wide: { suffix: '', knots: [[1.100, .190, .390, .305, .380], [1.000, .230, .345, .295, .335], [.900, .260, .320, .285, .305], [.760, .280, .305, .276, .286],
+      [.600, .290, .306, .273, .283], [.400, .300, .305, .279, .288], [.200, .310, .318, .285, .293], [.060, .320, .344, .304, .312]] },
+    // Straight legs: the same width from the knee down to the shoe.
+    straight: { suffix: 'Straight', knots: [[1.100, .190, .385, .305, .375], [1.000, .230, .335, .292, .325], [.900, .255, .300, .278, .290], [.760, .270, .280, .272, .268],
+      [.600, .275, .275, .262, .262], [.400, .280, .275, .260, .260], [.200, .285, .275, .260, .260], [.060, .290, .275, .260, .260]] },
+    // Slim legs that taper toward the ankle.
+    slim: { suffix: 'Slim', knots: [[1.100, .195, .375, .300, .370], [1.000, .232, .320, .288, .318], [.900, .252, .282, .270, .280], [.760, .265, .250, .262, .245],
+      [.600, .270, .215, .222, .212], [.400, .272, .192, .195, .192], [.200, .275, .178, .180, .178], [.060, .278, .172, .175, .172]] }
+  };
+  for (const [variant, { suffix, knots }] of Object.entries(trouserVariants)) {
+  const trouserRows = sample([...hipKnots, ...knots], 110);
+  for (const [name, sign, hip, knee, otherHip, otherKnee] of [[`womanLeftTrouser${suffix}`, -1, 3, 4, 6, 7], [`womanRightTrouser${suffix}`, 1, 6, 7, 3, 4]]) {
     const arc = 30, wall = 5;
     const rows = trouserRows.map(([y, cx, rx, rzF, rzB]) => {
       // The inner side of each leg is a flat seam just off the centre line, so the two legs never cross.
@@ -766,7 +807,8 @@ function createShirtTrousers() {
       const hipW = smoothstep(.62, .90, y), localY = clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
       return [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
         [hip, legShare * hipW * own], [knee, legShare * (1 - hipW) * own], [otherHip, legShare * hipW * (1 - own)], [otherKnee, legShare * (1 - hipW) * (1 - own)]];
-    }, arc);
+    }, arc).userData.piece = `trousers:${variant}`;
+  }
   }
 }
 if (feminine) createShirtTrousers();
@@ -915,7 +957,10 @@ frame();
 window.Cloth3D = {
   setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
   // Outfits on the woman: 'dress' shows the dress and gele; 'shirtTrousers' shows the sleeveless top and wide trousers.
-  setOutfit(name) { const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; womanShirtTrousers.forEach(part => { part.visible = !dress; }); },
+  setOutfit(name) { womanOutfit = name; const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; showWomanPieces(); },
+  // Pieces of the top + trousers outfit: { jacket: 'wide' | 'normal' | 'none', shirt: 'sleeveless' | 'short' | 'long', trousers: 'wide' | 'straight' | 'slim' }.
+  setPieces(choice) { Object.assign(womanPieces, choice || {}); showWomanPieces(); },
+  getVisiblePanels() { return [...surfaces.entries()].filter(([, mesh]) => mesh.visible).map(([id]) => id); },
   select(id) { surfaces.forEach((m, key) => { m.material.emissive.set(key === id ? '#514237' : '#000000'); m.material.emissiveIntensity = key === id ? .12 : 0; }); },
   setTexture(id, data) {
     const loader = new THREE.TextureLoader(); loader.load(data, texture => {
