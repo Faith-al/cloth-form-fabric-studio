@@ -817,7 +817,8 @@ function createShirtTrousers() {
   const skirtVariants = {
     skirtSlim: [[1.10, .55, .285, .35], [1.00, .545, .28, .29], [.90, .525, .285, .26], [.76, .50, .29, .25], [.60, .47, .275, .23], [.45, .445, .255, .21]],
     skirt: [[1.10, .56, .29, .37], [1.00, .56, .295, .33], [.90, .555, .30, .31], [.76, .55, .305, .30], [.60, .545, .30, .295], [.45, .54, .30, .29]],
-    skirtWide: [[1.10, .575, .30, .38], [1.00, .605, .325, .36], [.90, .645, .355, .37], [.76, .705, .40, .41], [.60, .775, .46, .465], [.45, .845, .52, .525]]
+    // Pleated skirt: a fitted waistband, then soft gathered pleats that fall in a full circle to just below the knee.
+    skirtWide: [[1.66, .53, .34, .39], [1.55, .615, .37, .46], [1.45, .655, .39, .50], [1.35, .685, .41, .52], [1.20, .725, .44, .54], [1.05, .77, .475, .565], [.90, .815, .51, .60], [.76, .86, .55, .635], [.64, .895, .58, .665]]
   };
   const skirtWeights = (x, y) => {
     if (y >= 1.68) return spine(y);
@@ -827,12 +828,16 @@ function createShirtTrousers() {
     return [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
       [3, legShare * hipW * left], [6, legShare * hipW * right], [4, legShare * (1 - hipW) * left], [7, legShare * (1 - hipW) * right]];
   };
+  const waistband = [[1.90, .39, .29, .29], [1.80, .385, .285, .285], [1.74, .395, .29, .29]];
   for (const [variant, knots] of Object.entries(skirtVariants)) {
-    const skirtRows = sample([...skirtHip, ...knots], 90), Name = variant[0].toUpperCase() + variant.slice(1);
+    const pleated = variant === 'skirtWide', cols = pleated ? 97 : 25;
+    const skirtRows = sample(pleated ? [...waistband, ...knots] : [...skirtHip, ...knots], 90), Name = variant[0].toUpperCase() + variant.slice(1);
     for (const [half, a0, a1] of [['Front', -Math.PI / 2, Math.PI / 2], ['Back', Math.PI / 2, Math.PI * 1.5]]) {
-      panel(`woman${Name}${half}`, skirtRows.map(([y, rx, rzF, rzB]) => Array.from({ length: 25 }, (_, s) => {
-        const a = a0 + (a1 - a0) * s / 24, sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
-        return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
+      panel(`woman${Name}${half}`, skirtRows.map(([y, rx, rzF, rzB]) => Array.from({ length: cols }, (_, s) => {
+        const a = a0 + (a1 - a0) * s / (cols - 1), sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
+        // Pleats: rounded folds all round the skirt, flat in the waistband and deepening toward the hem.
+        const fold = pleated ? 1 + smoothstep(1.76, 1.30, y) * (.03 + .04 * smoothstep(1.3, .64, y)) * Math.cos(22 * a) : 1;
+        return [rx * sn * q * fold, y, (c >= 0 ? rzF : rzB) * c * q * fold];
       })), skirtWeights).userData.piece = `trousers:${variant}`;
     }
   }
