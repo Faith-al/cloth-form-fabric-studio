@@ -818,7 +818,7 @@ function createShirtTrousers() {
     skirtSlim: [[1.10, .55, .285, .35], [1.00, .545, .28, .29], [.90, .525, .285, .26], [.76, .50, .29, .25], [.60, .47, .275, .23], [.45, .445, .255, .21]],
     skirt: [[1.10, .56, .29, .37], [1.00, .56, .295, .33], [.90, .555, .30, .31], [.76, .55, .305, .30], [.60, .545, .30, .295], [.45, .54, .30, .29]],
     // Pleated skirt: a fitted waistband, then soft gathered pleats that fall in a full circle to just below the knee.
-    skirtWide: [[1.66, .53, .34, .39], [1.55, .615, .37, .46], [1.45, .655, .39, .50], [1.35, .685, .41, .52], [1.20, .725, .44, .54], [1.05, .77, .475, .565], [.90, .815, .51, .60], [.76, .86, .55, .635], [.64, .895, .58, .665]]
+    skirtWide: [[1.68, .44, .30, .33], [1.60, .53, .33, .41], [1.50, .60, .36, .475], [1.42, .645, .38, .50], [1.35, .685, .41, .52], [1.20, .725, .44, .54], [1.05, .77, .475, .565], [.90, .815, .51, .60], [.76, .86, .55, .635], [.64, .895, .58, .665]]
   };
   const skirtWeights = (x, y) => {
     if (y >= 1.68) return spine(y);
@@ -830,13 +830,21 @@ function createShirtTrousers() {
   };
   const waistband = [[1.90, .39, .29, .29], [1.80, .385, .285, .285], [1.74, .395, .29, .29]];
   for (const [variant, knots] of Object.entries(skirtVariants)) {
-    const pleated = variant === 'skirtWide', cols = pleated ? 97 : 25;
+    const pleated = variant === 'skirtWide', cols = pleated ? 169 : 25;
     const skirtRows = sample(pleated ? [...waistband, ...knots] : [...skirtHip, ...knots], 90), Name = variant[0].toUpperCase() + variant.slice(1);
     for (const [half, a0, a1] of [['Front', -Math.PI / 2, Math.PI / 2], ['Back', Math.PI / 2, Math.PI * 1.5]]) {
       panel(`woman${Name}${half}`, skirtRows.map(([y, rx, rzF, rzB]) => Array.from({ length: cols }, (_, s) => {
         const a = a0 + (a1 - a0) * s / (cols - 1), sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
         // Pleats: rounded folds all round the skirt, flat in the waistband and deepening toward the hem.
-        const fold = pleated ? 1 + smoothstep(1.76, 1.30, y) * (.03 + .04 * smoothstep(1.3, .64, y)) * Math.cos(22 * a) : 1;
+        // Broad, flat-topped folds with soft rounded valleys. They start right under the waistband, close together,
+        // and fan out as the skirt widens.
+        // Under the waistband the folds sit side by side like a row of rounded tubes touching each other; lower
+        // down they part into broad flat-topped folds with wide soft valleys.
+        const u = ((14 * a) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+        const tube = 2 * Math.sqrt(Math.max(0, 1 - (u / Math.PI) ** 2)) - 1;
+        const flat = Math.tanh(1.8 * Math.cos(14 * a)) / Math.tanh(1.8), part = smoothstep(1.62, 1.15, y);
+        const wave = (1 - part) * tube + part * flat;
+        const fold = pleated ? 1 + smoothstep(1.75, 1.69, y) * (0.05 + (0.090) * smoothstep(1.62, .64, y)) * wave : 1;
         return [rx * sn * q * fold, y, (c >= 0 ? rzF : rzB) * c * q * fold];
       })), skirtWeights).userData.piece = `trousers:${variant}`;
     }
