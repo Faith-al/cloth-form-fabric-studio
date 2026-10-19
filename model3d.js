@@ -810,6 +810,32 @@ function createShirtTrousers() {
     }, arc).userData.piece = `trousers:${variant}`;
   }
   }
+  // Skirts, chosen in place of the trousers: high waist like the trousers, to mid-calf. Like the dress skirt they
+  // are one column that follows both legs equally, with a gentle bias toward the nearer leg at the hip.
+  const skirtHip = [[1.90, .39, .29, .29], [1.80, .385, .285, .285], [1.70, .46, .29, .29], [1.60, .545, .30, .375],
+    [1.50, .585, .315, .43], [1.40, .595, .325, .45], [1.30, .58, .315, .445], [1.20, .565, .30, .42]];
+  const skirtVariants = {
+    skirtSlim: [[1.10, .55, .285, .35], [1.00, .545, .28, .29], [.90, .525, .285, .26], [.76, .50, .29, .25], [.60, .47, .275, .23], [.45, .445, .255, .21]],
+    skirt: [[1.10, .56, .29, .37], [1.00, .56, .295, .33], [.90, .555, .30, .31], [.76, .55, .305, .30], [.60, .545, .30, .295], [.45, .54, .30, .29]],
+    skirtWide: [[1.10, .575, .30, .38], [1.00, .605, .325, .36], [.90, .645, .355, .37], [.76, .705, .40, .41], [.60, .775, .46, .465], [.45, .845, .52, .525]]
+  };
+  const skirtWeights = (x, y) => {
+    if (y >= 1.68) return spine(y);
+    const torsoShare = smoothstep(1.38, 1.80, y), legShare = 1 - torsoShare;
+    const bias = smoothstep(.95, 1.4, y), left = .5 + (clamp(.5 - x / .5, 0, 1) - .5) * .75 * bias, right = 1 - left;
+    const hipW = smoothstep(.62, .90, y), localY = clamp(y - 1.36, 0, .48), rootShare = 1 - localY / .48;
+    return [[0, torsoShare * rootShare], [1, torsoShare * (1 - rootShare)],
+      [3, legShare * hipW * left], [6, legShare * hipW * right], [4, legShare * (1 - hipW) * left], [7, legShare * (1 - hipW) * right]];
+  };
+  for (const [variant, knots] of Object.entries(skirtVariants)) {
+    const skirtRows = sample([...skirtHip, ...knots], 90), Name = variant[0].toUpperCase() + variant.slice(1);
+    for (const [half, a0, a1] of [['Front', -Math.PI / 2, Math.PI / 2], ['Back', Math.PI / 2, Math.PI * 1.5]]) {
+      panel(`woman${Name}${half}`, skirtRows.map(([y, rx, rzF, rzB]) => Array.from({ length: 25 }, (_, s) => {
+        const a = a0 + (a1 - a0) * s / 24, sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
+        return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
+      })), skirtWeights).userData.piece = `trousers:${variant}`;
+    }
+  }
 }
 if (feminine) createShirtTrousers();
 
@@ -958,7 +984,7 @@ window.Cloth3D = {
   setDress(visible) { womanDress?.forEach(part => { part.visible = !!visible; }); },
   // Outfits on the woman: 'dress' shows the dress and gele; 'shirtTrousers' shows the sleeveless top and wide trousers.
   setOutfit(name) { womanOutfit = name; const dress = name === 'dress'; womanDress?.forEach(part => { part.visible = dress; }); const gele = surfaces.get('headtie'); if (gele) gele.visible = dress; showWomanPieces(); },
-  // Pieces of the top + trousers outfit: { jacket: 'wide' | 'normal' | 'none', shirt: 'sleeveless' | 'short' | 'long', trousers: 'wide' | 'straight' | 'slim' }.
+  // Pieces of the top + trousers outfit: { jacket: 'wide' | 'normal' | 'none', shirt: 'sleeveless' | 'short' | 'long', trousers: 'wide' | 'straight' | 'slim' | 'skirtWide' | 'skirt' | 'skirtSlim' }.
   setPieces(choice) { Object.assign(womanPieces, choice || {}); showWomanPieces(); },
   getVisiblePanels() { return [...surfaces.entries()].filter(([, mesh]) => mesh.visible).map(([id]) => id); },
   select(id) { surfaces.forEach((m, key) => { m.material.emissive.set(key === id ? '#514237' : '#000000'); m.material.emissiveIntensity = key === id ? .12 : 0; }); },
