@@ -700,6 +700,42 @@ function createShirtTrousers() {
   })), (x, y) => spine(y));
   topPanel('womanTopFront', -Math.PI / 2, Math.PI / 2);
   topPanel('womanTopBack', Math.PI / 2, Math.PI * 1.5);
+  // Open cropped jacket worn over the top, like a kimono jacket: no collar, fronts hanging straight down with
+  // a gap in the middle, ending at the waist, with wide elbow-length sleeves. Left front, right front, back
+  // and both sleeves are separate fabric panels.
+  const jacketRows = sample([
+    [2.71, .32, .225, .225], [2.63, .43, .255, .255], [2.55, .505, .29, .29], [2.46, .525, .325, .325],
+    [2.32, .505, .425, .335], [2.20, .49, .445, .34], [2.10, .475, .435, .34], [2.00, .445, .385, .33],
+    [1.90, .425, .345, .325], [1.80, .42, .335, .325], [1.72, .425, .335, .325]
+  ], 64);
+  const edge = .15; // half the gap between the two fronts
+  const jacketPanel = (name, from, to) => panel(name, jacketRows.map(([y, rx, rzF, rzB]) => Array.from({ length: 25 }, (_, s) => {
+    const a = from(rx) + (to(rx) - from(rx)) * s / 24, sn = Math.sin(a), c = Math.cos(a), q = squarish(sn, c);
+    return [rx * sn * q, y, (c >= 0 ? rzF : rzB) * c * q];
+  })), (x, y) => spine(y));
+  const gap = rx => Math.asin(clamp(edge / rx, 0, 1));
+  jacketPanel('womanJacketLeftFront', () => -Math.PI / 2, rx => -gap(rx));
+  jacketPanel('womanJacketRightFront', rx => gap(rx), () => Math.PI / 2);
+  jacketPanel('womanJacketBack', () => Math.PI / 2, () => Math.PI * 1.5);
+  for (const [side, sign] of [['left', -1], ['right', 1]]) {
+    const curve = new THREE.CatmullRomCurve3([[.30, 2.63, 0], [.46, 2.53, 0], [.57, 2.28, 0], [.65, 2.04, 0], [.71, 1.82, 0]].map(([x, y, z]) => new THREE.Vector3(sign * x, y, z)));
+    const geo = taperedTube(curve, 24, 28, [.16, .205, .235, .265, .30], 0);
+    const pos = geo.attributes.position, idx = new Uint16Array(pos.count * 4), wts = new Float32Array(pos.count * 4);
+    for (let v = 0; v < pos.count; v++) {
+      // bones: 0 chest, 1 shoulder, 2 elbow
+      const y = pos.getY(v), k = v * 4, top = 1 - smoothstep(2.30, 2.55, y), toElbow = .35 * smoothstep(2.05, 1.82, y);
+      const w = [[0, (1 - top) * .6], [1, Math.max(0, (top + (1 - top) * .4) * (1 - toElbow))], [2, toElbow]];
+      const total = w.reduce((sum, [, x]) => sum + x, 0) || 1;
+      w.forEach(([b, x], n) => { idx[k + n] = b; wts[k + n] = x / total; });
+    }
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4)); geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wts, 4));
+    const name = side === 'left' ? 'womanJacketLeftSleeve' : 'womanJacketRightSleeve', rig = armRigs[side];
+    const sleeve = new THREE.SkinnedMesh(geo, material.clone()); sleeve.name = name; sleeve.userData.panel = name; sleeve.userData.baseMaterial = material;
+    sleeve.castShadow = true; sleeve.receiveShadow = true; sleeve.frustumCulled = false; sleeve.visible = false;
+    scene.add(sleeve); scene.updateMatrixWorld(true);
+    const sk = new THREE.Skeleton([spineRig.chest, rig.root, rig.elbow]); sk.calculateInverses(); sleeve.bind(sk);
+    surfaces.set(name, sleeve); womanShirtTrousers.push(sleeve);
+  }
   // Trousers: y, leg centre, half-width, front depth, back depth. Above the crotch each leg panel is one half
   // of the hips; below it, it becomes its own wide leg that flares out to the floor.
   const trouserRows = sample([
