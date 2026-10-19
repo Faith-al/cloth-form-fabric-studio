@@ -733,6 +733,33 @@ function createShirtTrousers() {
   }
 }
 if (feminine) createShirtTrousers();
+
+// Make the whole woman 8% narrower (shoulders to feet, clothes included), keeping the head, neck and gele as
+// they are. Done once at rest: joints and bones move inward, every body and garment surface is narrowed in
+// width, and the skinned surfaces are bound again to the moved bones.
+if (feminine) {
+  const W = .92, narrow = new THREE.Matrix4().makeScale(W, 1, 1), keep = new Set();
+  joints.neck.traverse(o => keep.add(o));
+  scene.updateMatrixWorld(true);
+  const skinned = [];
+  scene.traverse(o => { if (o.isSkinnedMesh) skinned.push(o); });
+  const rigid = [];
+  joints.torso.traverse(o => { if (!keep.has(o) && o.isMesh && !o.isSkinnedMesh) rigid.push(o); });
+  // Rigid limb shapes: narrow their geometry in world width (they may be rotated or stretched locally).
+  for (const mesh of rigid) {
+    const local = new THREE.Matrix4().compose(new THREE.Vector3(), mesh.quaternion, mesh.scale);
+    mesh.geometry = mesh.geometry.clone().applyMatrix4(local.clone().invert().multiply(narrow).multiply(local));
+  }
+  joints.torso.traverse(o => { if (o !== joints.torso && !keep.has(o)) o.position.x *= W; });
+  joints.neck.position.x *= W;
+  for (const mesh of skinned) { mesh.geometry.applyMatrix4(narrow); mesh.geometry.computeVertexNormals(); }
+  scene.updateMatrixWorld(true);
+  for (const mesh of skinned) mesh.bind(mesh.skeleton);
+  for (const [side, rig] of Object.entries(armRigs)) {
+    const e = rig.elbow.position, w = rig.wrist.position;
+    Object.assign(rig, { upperLength: Math.hypot(e.x, e.y), lowerLength: Math.hypot(w.x, w.y), upperBase: Math.atan2(e.y, e.x), lowerBase: Math.atan2(w.y, w.x) });
+  }
+}
 const poseObjects = {
   torso: joints.torso, head: joints.head, neck: joints.neck,
   waist: spineRig.root, midSpine: spineRig.mid, chest: spineRig.chest,
